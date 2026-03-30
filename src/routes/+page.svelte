@@ -1,30 +1,18 @@
 <script lang="ts">
-  import Header from '$lib/components/Header.svelte';
-  import Footer from '$lib/components/Footer.svelte';
   import Dashboard from '$lib/components/Dashboard.svelte';
-
-  let isLoading = true;
-
-  // Simulate data fetching
-  setTimeout(() => {
-    isLoading = false;
-  }, 1000);
+  import { connected } from '$lib/stores/wallet';
 </script>
 
-<Header />
+<svelte:head>
+  <title>Uni Grid — Dashboard</title>
+</svelte:head>
 
-{#if isLoading}
-  <div class="loading">Loading...</div>
-{:else}
+{#if $connected}
   <Dashboard />
+{:else}
+  <div class="text-center py-24 px-4">
+    <p class="text-3xl text-accent mb-4">◈</p>
+    <h2 class="mb-2 text-2xl font-bold">Connect your wallet</h2>
+    <p class="text-muted m-0">Connect a wallet on Unichain to view and manage your grid positions.</p>
+  </div>
 {/if}
-
-<Footer />
-
-<style>
-  .loading {
-    text-align: center;
-    font-size: 1.5rem;
-    margin-top: 2rem;
-  }
-</style>
