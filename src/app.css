@@ -1,0 +1,54 @@
+:root {
+    color-scheme: light;
+    --bg: #f4efe6;
+    --surface: rgba(255, 251, 245, 0.86);
+    --surface-strong: #fff9f0;
+    --text: #1d261f;
+    --muted: #5e695f;
+    --line: rgba(29, 38, 31, 0.14);
+    --accent: #176b52;
+    --accent-strong: #0d4f3c;
+    --glow: rgba(23, 107, 82, 0.18);
+    --radius: 24px;
+    --shadow: 0 24px 60px rgba(27, 35, 29, 0.14);
+    font-family: "Manrope", "Segoe UI", sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+    min-height: 100%;
+}
+
+body {
+    margin: 0;
+    color: var(--text);
+    background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.82), transparent 28%),
+        radial-gradient(circle at right, rgba(23, 107, 82, 0.16), transparent 20%),
+        linear-gradient(180deg, #efe6d7 0%, var(--bg) 52%, #e7ded0 100%);
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(rgba(29, 38, 31, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(29, 38, 31, 0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: radial-gradient(circle at center, black, transparent 80%);
+}
+
+a {
+    color: inherit;
+}
+
+button,
+input,
+select {
+    font: inherit;
+}
