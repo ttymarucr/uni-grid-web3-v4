@@ -1,6 +1,8 @@
 import { writable, derived, readable } from 'svelte/store';
 import { watchAccount, watchChainId, disconnect, getAccount, getChainId } from '@wagmi/core';
 import { config } from '$lib/wagmi/client';
+import { chainById } from '$lib/wagmi/config';
+import { isSupported } from '$lib/contracts/config';
 
 export const connected = writable(false);
 export const signerAddress = writable<string | null>(null);
@@ -38,3 +40,9 @@ export async function disconnectWagmi() {
 export const shortAddress = derived(signerAddress, ($addr) =>
   $addr ? `${$addr.slice(0, 6)}…${$addr.slice(-4)}` : ''
 );
+
+export const chainName = derived(chainId, ($id) =>
+  $id != null ? (chainById.get($id)?.name ?? `Chain ${$id}`) : ''
+);
+
+export const onSupportedChain = derived(chainId, ($id) => isSupported($id));

@@ -2,10 +2,17 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_GRIDHOOK_ADDRESS: string;
-  readonly VITE_UNICHAIN_RPC_URL: string;
+  readonly VITE_GRIDHOOK_ADDRESS_ETHEREUM: string;
+  readonly VITE_GRIDHOOK_ADDRESS_UNICHAIN: string;
+  readonly VITE_GRIDHOOK_ADDRESS_ARBITRUM: string;
+  readonly VITE_GRIDHOOK_ADDRESS_BASE: string;
+  readonly VITE_GRIDHOOK_ADDRESS_BNB: string;
+  readonly VITE_RPC_URL_ETHEREUM: string;
+  readonly VITE_RPC_URL_UNICHAIN: string;
+  readonly VITE_RPC_URL_ARBITRUM: string;
+  readonly VITE_RPC_URL_BASE: string;
+  readonly VITE_RPC_URL_BNB: string;
   readonly VITE_WALLETCONNECT_PROJECT_ID: string;
-  readonly VITE_CHAIN_ID: string;
 }
 
 interface ImportMeta {

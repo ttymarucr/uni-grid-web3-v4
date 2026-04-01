@@ -1,6 +1,5 @@
 import type { waitForTransactionReceipt } from '@wagmi/core';
 import { addToast, updateToast } from '$lib/stores/toasts';
-import { txUrl } from '$lib/contracts/config';
 import type { Hash } from 'viem';
 
 export interface TxResult {
@@ -57,7 +56,7 @@ function parseError(err: any): string {
     return 'insufficient funds for gas';
   }
   if (err?.message?.includes('chain mismatch') || err?.message?.includes('chainId')) {
-    return 'wrong network — please switch to Unichain';
+    return 'wrong network — please switch to a supported chain';
   }
   return err?.shortMessage || err?.message || 'unknown error';
 }

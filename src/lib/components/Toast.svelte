@@ -1,6 +1,7 @@
 <script lang="ts">
   import { toasts, removeToast } from '$lib/stores/toasts';
   import { txUrl } from '$lib/contracts/config';
+  import { chainId } from '$lib/stores/wallet';
 </script>
 
 {#if $toasts.length > 0}
@@ -28,7 +29,7 @@
         <div class="flex-1 min-w-0">
           <p class="m-0 text-sm leading-relaxed break-words">{toast.message}</p>
           {#if toast.txHash}
-            <a class="inline-block mt-1 text-[0.78rem] text-accent no-underline hover:underline" href={txUrl(toast.txHash)} target="_blank" rel="noreferrer">
+            <a class="inline-block mt-1 text-[0.78rem] text-accent no-underline hover:underline" href={txUrl($chainId, toast.txHash)} target="_blank" rel="noreferrer">
               View transaction ↗
             </a>
           {/if}

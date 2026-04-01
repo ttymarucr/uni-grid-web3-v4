@@ -16,7 +16,7 @@
 
 <svelte:head>
     <title>Uni Grid</title>
-    <meta name="description" content="Uni Grid — Manage grid liquidity positions on Unichain.">
+    <meta name="description" content="Uni Grid — Manage grid liquidity positions across multiple chains.">
 </svelte:head>
 
 <div class="flex flex-col min-h-screen">
@@ -31,9 +31,9 @@
             <Dashboard />
         {:else}
             <div class="text-center py-24 px-4">
-                <p class="text-3xl text-accent mb-4"><img class="w-24 h-24 bg-accent rounded-full" src="/logo.svg" alt="Uni Grid Logo"/></p>
+                <div class="mb-4 flex justify-center"><img class="w-24 h-24 bg-accent rounded-full" src="/logo.svg" alt="Uni Grid Logo"/></div>
                 <h2 class="mb-2 text-2xl font-bold">Connect your wallet</h2>
-                <p class="text-muted m-0">Connect a wallet on Unichain to view and manage your grid positions.</p>
+                <p class="text-muted m-0">Connect a wallet to view and manage your grid positions.</p>
             </div>
         {/if}
     </main>

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { connected, signerAddress, chainId as chainIdStore, loading, disconnectWagmi, shortAddress } from '$lib/stores/wallet';
-  import { unichain } from '$lib/wagmi/config';
+  import { connected, signerAddress, chainId as chainIdStore, loading, disconnectWagmi, shortAddress, chainName, onSupportedChain } from '$lib/stores/wallet';
+  import { supportedChains } from '$lib/wagmi/config';
   import { config } from '$lib/wagmi/client';
-  import { connect } from '@wagmi/core';
+  import { connect, switchChain } from '@wagmi/core';
   import { injected } from '@wagmi/connectors';
 
   let connecting = false;
@@ -18,7 +18,13 @@
     }
   }
 
-  $: wrongChain = $connected && $chainIdStore !== unichain.id;
+  async function handleSwitchChain(id: number) {
+    try {
+      await switchChain(config, { chainId: id });
+    } catch {
+      // user rejected
+    }
+  }
 </script>
 
 <header class="sticky top-0 z-100 backdrop-blur-lg bg-surface border-b border-line">
@@ -30,11 +36,18 @@
 
     <div class="flex items-center gap-3">
       {#if $connected}
-        {#if wrongChain}
-          <span class="text-xs font-bold py-1 px-2.5 rounded-full bg-[rgba(200,50,50,0.15)] text-[#a33]">Wrong Network</span>
-        {:else}
-          <span class="text-xs font-bold py-1 px-2.5 rounded-full bg-glow text-accent-strong">{unichain.name}</span>
-        {/if}
+        <select
+          class="text-xs font-bold py-1 px-2.5 rounded-full border border-line bg-surface-strong text-text cursor-pointer focus:outline-accent"
+          value={$chainIdStore}
+          on:change={(e) => handleSwitchChain(Number(e.currentTarget.value))}
+        >
+          {#if !$onSupportedChain}
+            <option disabled selected>Unsupported Network</option>
+          {/if}
+          {#each supportedChains as chain}
+            <option value={chain.id}>{chain.name}</option>
+          {/each}
+        </select>
         <span class="font-mono text-sm text-muted">{$shortAddress}</span>
         <button class="cursor-pointer border border-line rounded-xl py-2 px-4 font-bold text-sm bg-transparent text-muted hover:bg-surface-strong transition-opacity duration-150" on:click={disconnectWagmi}>Disconnect</button>
       {:else}
