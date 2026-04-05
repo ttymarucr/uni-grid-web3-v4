@@ -13,6 +13,7 @@
   "dependencies": {
     "@wagmi/connectors": "^8.0.0",
     "@wagmi/core": "^3.4.1",
+    "chart.js": "^4.4.7",
     "svelte": "^4.2.19",
     "viem": "^2.47.6"
   },
