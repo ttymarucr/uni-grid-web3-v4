@@ -23,6 +23,14 @@
         <h2 class="text-xl font-bold mb-2">Profile</h2>
         <p class="text-sm text-muted">View your deployed grids, manage positions, and run actions.</p>
       </a>
+      <a
+        href="/swap"
+        use:link
+        class="block rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-card hover:border-accent transition-colors duration-150"
+      >
+        <h2 class="text-xl font-bold mb-2">Swap</h2>
+        <p class="text-sm text-muted">Swap tokens directly through hooked pools, generating fee revenue for grid positions.</p>
+      </a>
     </div>
   </div>
 {:else}

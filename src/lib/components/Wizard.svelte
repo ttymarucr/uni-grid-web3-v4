@@ -36,6 +36,7 @@
   import { getPresetsForChain, isNativeToken } from '$lib/contracts/poolPresets';
   import { getTokenAmountsForOrders, formatTokenAmount, parseTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, tickToPrice } from '$lib/contracts/tickMath';
   import { STRATEGY_PRESETS, DIST_LABELS, DIST_DESCRIPTIONS } from '$lib/contracts/strategyPresets';
+  import Icon from '@iconify/svelte';
   import {
     areTokenDecimalsReady as areTokenDecimalsReadyShared,
     applyTickSpacingFromFee as applyTickSpacingFromFeeShared,
@@ -55,6 +56,7 @@
   } from '$lib/stores/gridController';
   import WeightChart from './WeightChart.svelte';
   import GridOrdersChart from './GridOrdersChart.svelte';
+  import TokenIcon from './TokenIcon.svelte';
   import type { Address } from 'viem';
 
   // ── Style classes ──
@@ -847,7 +849,11 @@
                 class:border-line={selectedPresetIdx !== i}
                 on:click={() => selectPreset(i)}
               >
-                <span class="font-bold text-text">{preset.label}</span>
+                <span class="flex items-center gap-1 font-bold text-text">
+                  <TokenIcon symbol={preset.currency0Symbol} size={18} />
+                  <TokenIcon symbol={preset.currency1Symbol} size={18} />
+                  {preset.label}
+                </span>
                 <span class="block text-[0.72rem] text-muted mt-0.5">Fee: {(preset.fee / 10000).toFixed(2)}% &middot; Tick Spacing: {preset.tickSpacing}</span>
               </button>
             {/each}
@@ -917,8 +923,8 @@
               class:border-line={selectedStrategyIdx !== i}
               on:click={() => selectStrategy(i)}
             >
-              <div class="flex items-center gap-2 mb-1">
-                <span class="text-lg">{preset.icon}</span>
+              <div class="flex items-center gap-0 mb-1">
+                <Icon icon={preset.icon} width={20} height={20} />
                 <span class="font-bold text-text">{preset.label}</span>
               </div>
               <span class="block text-[0.75rem] text-muted">{preset.description}</span>
@@ -1013,7 +1019,13 @@
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>Pair</span>
-            <span class="text-sm font-semibold">{tokenLabel(currency0Symbol, currency0)} / {tokenLabel(currency1Symbol, currency1)}</span>
+            <span class="text-sm font-semibold inline-flex items-center gap-1">
+              <TokenIcon symbol={currency0Symbol} size={16} />
+              {tokenLabel(currency0Symbol, currency0)}
+              /
+              <TokenIcon symbol={currency1Symbol} size={16} />
+              {tokenLabel(currency1Symbol, currency1)}
+            </span>
           </div>
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>Distribution</span>
@@ -1226,8 +1238,9 @@
           </div>
         </div>
 
+        {#if advancedMode}
         <div class="mb-5 rounded-xl border border-line bg-surface-strong p-4 text-sm">
-          <div class="mb-2 font-bold text-text">Pre-submit Amount Check</div>
+          <div class="mb-2 font-bold text-text">Pre-Submit Amount Check</div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <div class="text-[0.72rem] uppercase tracking-wide text-muted">{currency0Symbol || 'Token0'}</div>
@@ -1264,6 +1277,7 @@
             </div>
           {/if}
         </div>
+        {/if}
 
         {#if deploying && deployStepLabel}
           <div class="flex items-center gap-3 mb-4 p-3 rounded-xl border border-accent/20" style="background: rgba(23,107,82,0.05)">

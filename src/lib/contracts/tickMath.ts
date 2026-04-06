@@ -158,6 +158,15 @@ export function formatTokenAmount(amount: bigint, decimals: number): string {
   return `${whole}.${trimmed}`;
 }
 
+export function formatRawTokenAmount(amount: bigint, decimals: number): string {
+  if (amount === 0n) return '0';
+  const divisor = 10n ** BigInt(decimals);
+  const whole = amount / divisor;
+  const remainder = amount % divisor;
+  const fractionStr = remainder.toString().padStart(decimals, '0');
+  return `${whole}.${fractionStr}`;
+}
+
 export function parseTokenAmount(amount: string, decimals: number): bigint {
   const s = amount.trim();
   if (!s || s === '.') return 0n;

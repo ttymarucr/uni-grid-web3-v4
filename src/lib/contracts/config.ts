@@ -57,3 +57,18 @@ export function addressUrl(chainId: number | null, addr: string): string {
   const base = getExplorerUrl(chainId);
   return base ? `${base}/address/${addr}` : `#addr-${addr}`;
 }
+
+// ── SwapRouter addresses (set after deployment via env vars) ──
+
+const swapRouterAddresses: Record<number, Address> = {
+  1: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_ETHEREUM as Address) ?? ZERO,
+  130: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_UNICHAIN as Address) ?? ZERO,
+  42161: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_ARBITRUM as Address) ?? ZERO,
+  8453: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_BASE as Address) ?? ZERO,
+  56: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_BNB as Address) ?? ZERO,
+};
+
+export function getSwapRouterAddress(chainId: number | null): Address {
+  if (chainId == null) return ZERO;
+  return swapRouterAddresses[chainId] ?? ZERO;
+}

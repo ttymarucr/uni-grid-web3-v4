@@ -4,6 +4,8 @@
   import { config } from '$lib/wagmi/client';
   import { connect, switchChain } from '@wagmi/core';
   import { injected } from '@wagmi/connectors';
+  import ChainIcon from './ChainIcon.svelte';
+  import { link } from 'svelte-spa-router';
 
   let connecting = false;
 
@@ -34,8 +36,15 @@
       <span class="font-extrabold text-[1.1rem]">Uni Grid</span>
     </div>
 
+    <nav class="flex items-center gap-4 text-sm font-semibold">
+      <a href="/wizard" use:link class="text-muted hover:text-text transition-colors">Wizard</a>
+      <a href="/swap" use:link class="text-muted hover:text-text transition-colors">Swap</a>
+      <a href="/profile" use:link class="text-muted hover:text-text transition-colors">Profile</a>
+    </nav>
+
     <div class="flex items-center gap-3">
       {#if $connected}
+        <ChainIcon chainId={$chainIdStore ?? 0} name={$chainName} size={18} />
         <select
           class="text-xs font-bold py-1 px-2.5 rounded-full border border-line bg-surface-strong text-text cursor-pointer focus:outline-accent"
           value={$chainIdStore}

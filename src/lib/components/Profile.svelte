@@ -19,7 +19,7 @@
   import {
     tokenLabel,
   } from '$lib/contracts/gridUiShared';
-  import { getTokenAmountsForOrders, formatTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick } from '$lib/contracts/tickMath';
+  import { getTokenAmountsForOrders, formatTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, formatRawTokenAmount } from '$lib/contracts/tickMath';
   import { DIST_LABELS } from '$lib/contracts/strategyPresets';
   import {
     buildPoolKey as buildPoolKeyShared,
@@ -30,6 +30,7 @@
   import WeightChart from './WeightChart.svelte';
   import GridOrdersChart from './GridOrdersChart.svelte';
   import { RefreshCw, RotateCcw, X } from 'lucide-svelte';
+  import TokenIcon from './TokenIcon.svelte';
   import type { Address } from 'viem';
 
   // ── Style classes ──
@@ -390,8 +391,9 @@
             class="text-left p-5 rounded-[var(--radius-card)] border border-line bg-surface shadow-card hover:border-accent transition-colors duration-150 cursor-pointer"
             on:click={() => openPosition(pos)}
           >
-            <div class="flex items-center gap-2 mb-3">
-              <span class="text-lg">&#x1F4CA;</span>
+            <div class="flex items-center gap-1 mb-3">
+              <TokenIcon symbol={pos.preset.currency0Symbol} size={20} />
+              <TokenIcon symbol={pos.preset.currency1Symbol} size={20} />
               <span class="font-extrabold text-text text-[1.05rem]">{pos.preset.label}</span>
             </div>
             <div class="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -436,7 +438,9 @@
 
     <!-- Pool header -->
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <h2 class="text-[1.3rem] font-extrabold">
+      <h2 class="text-[1.3rem] font-extrabold inline-flex items-center gap-1.5">
+        <TokenIcon symbol={currency0Symbol} size={22} />
+        <TokenIcon symbol={currency1Symbol} size={22} />
         {tokenLabel(currency0Symbol, currency0)} / {tokenLabel(currency1Symbol, currency1)} Grid
       </h2>
       <button
@@ -544,11 +548,11 @@
         {#if orderFees.length > 0 && (totalFees0 > 0n || totalFees1 > 0n)}
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>{currency0Symbol || 'Token0'} Fees</span>
-            <span class="text-base font-semibold font-mono text-green-400">~{formatTokenAmount(totalFees0, currency0Decimals)}</span>
+            <span class="text-base font-semibold font-mono text-green-400" title={formatRawTokenAmount(totalFees0, currency0Decimals)}>~{formatTokenAmount(totalFees0, currency0Decimals)}</span>
           </div>
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>{currency1Symbol || 'Token1'} Fees</span>
-            <span class="text-base font-semibold font-mono text-green-400">~{formatTokenAmount(totalFees1, currency1Decimals)}</span>
+            <span class="text-base font-semibold font-mono text-green-400" title={formatRawTokenAmount(totalFees1, currency1Decimals)}>~{formatTokenAmount(totalFees1, currency1Decimals)}</span>
           </div>
         {/if}
       </div>

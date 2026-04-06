@@ -11,6 +11,7 @@
     "deploy": "yarn build"
   },
   "dependencies": {
+    "@iconify/svelte": "4.2.0",
     "@wagmi/connectors": "^8.0.0",
     "@wagmi/core": "^3.4.1",
     "chart.js": "^4.4.7",

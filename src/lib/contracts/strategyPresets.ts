@@ -14,7 +14,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     label: 'Conservative',
     description: 'Wide grid, few orders, low rebalance frequency. Best for stable pairs or long-term holds.',
-    icon: '🛡',
+    icon: 'lucide:shield',
     gridSpacing: 240,
     maxOrders: 5,
     rebalanceThresholdBps: 400,
@@ -25,7 +25,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     label: 'Moderate',
     description: 'Balanced spacing with sigmoid distribution. Good all-around strategy for volatile pairs.',
-    icon: '⚖',
+    icon: 'lucide:scale',
     gridSpacing: 60,
     maxOrders: 10,
     rebalanceThresholdBps: 200,
@@ -36,7 +36,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     label: 'Aggressive',
     description: 'Tight grid, many orders, concentrated liquidity. Maximizes fees in high-volume pools.',
-    icon: '⚡',
+    icon: 'lucide:zap',
     gridSpacing: 60,
     maxOrders: 30,
     rebalanceThresholdBps: 100,
@@ -47,7 +47,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     label: 'Custom',
     description: 'Configure all parameters manually for full control over your grid strategy.',
-    icon: '⚙',
+    icon: 'lucide:settings',
     gridSpacing: 60,
     maxOrders: 10,
     rebalanceThresholdBps: 200,
