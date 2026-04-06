@@ -29,6 +29,7 @@
   } from '$lib/stores/gridController';
   import WeightChart from './WeightChart.svelte';
   import GridOrdersChart from './GridOrdersChart.svelte';
+  import { RefreshCw, RotateCcw, X } from 'lucide-svelte';
   import type { Address } from 'viem';
 
   // ── Style classes ──
@@ -36,6 +37,10 @@
   const btnPrimary = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-accent text-white hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
   const btnOutline = 'cursor-pointer rounded-xl py-2.5 px-5 font-bold text-sm bg-transparent text-accent border border-accent hover:bg-glow disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
   const btnDanger = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
+  const actionBtnBase = 'w-9 h-9 inline-flex items-center justify-center rounded-full transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2';
+  const actionBtnPrimary = `${actionBtnBase} border-none bg-accent text-white hover:bg-accent-strong`;
+  const actionBtnNeutral = `${actionBtnBase} border border-line bg-surface-strong text-text hover:border-accent hover:bg-glow`;
+  const actionBtnDanger = `${actionBtnBase} border-none bg-red-600 text-white hover:bg-red-700`;
   const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-6 shadow-card';
   const labelCls = 'text-[0.78rem] font-bold text-muted uppercase tracking-wide';
   const statLabel = 'text-[0.72rem] font-bold text-muted uppercase tracking-wider';
@@ -299,6 +304,7 @@
   let keeperAuthorized = true;
   let pendingKeeper = false;
   let showKeeper = false;
+  let showGridOrdersTable = false;
 
   async function handleSetKeeper() {
     if (!keeperAddress) return;
@@ -443,7 +449,49 @@
 
     <!-- Status cards -->
     <section class={card}>
-      <h2 class="mb-4 text-[1.15rem] font-extrabold">Grid Status</h2>
+      <div class="mb-4 flex items-center justify-between gap-3 flex-wrap">
+        <h2 class="text-[1.15rem] font-extrabold">Grid Status</h2>
+        <div class="flex items-center gap-2 flex-wrap justify-end">
+          {#if advancedMode}
+            <label class="flex items-center gap-2">
+              <span class="text-[0.72rem] font-bold text-muted uppercase tracking-wider">Deadline</span>
+              <input class={inputCls} type="number" bind:value={deadlineMinutes} min="1" max="60" />
+            </label>
+          {/if}
+
+          <button
+            class={actionBtnPrimary}
+            on:click={handleRebalance}
+            disabled={pendingRebalance}
+            aria-label={pendingRebalance ? 'Rebalancing' : 'Rebalance grid'}
+            title={pendingRebalance ? 'Rebalancing' : 'Rebalance grid'}
+          >
+            <span class:animate-spin={pendingRebalance}>
+              <RefreshCw size={15} />
+            </span>
+          </button>
+          <button
+            class={actionBtnNeutral}
+            on:click={() => fetchPoolData()}
+            disabled={loadingData}
+            aria-label={loadingData ? 'Refreshing' : 'Refresh data'}
+            title={loadingData ? 'Refreshing' : 'Refresh data'}
+          >
+            <span class:animate-spin={loadingData}>
+              <RotateCcw size={15} />
+            </span>
+          </button>
+          <button
+            class={actionBtnDanger}
+            on:click={handleCloseGrid}
+            disabled={pendingClose}
+            aria-label={pendingClose ? 'Closing grid' : 'Close grid'}
+            title={pendingClose ? 'Closing grid' : 'Close grid'}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      </div>
       <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
         {#if poolState}
           <div class="flex flex-col gap-0.5">
@@ -531,61 +579,48 @@
     <!-- Grid Orders Table -->
     {#if gridOrders.length > 0}
       <section class={card}>
-        <h2 class="mb-4 text-[1.15rem] font-extrabold">Grid Orders ({gridOrders.length})</h2>
-        <div class="overflow-x-auto">
-          <table class="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">#</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Tick Lower</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Tick Upper</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">{currency0Symbol || 'Token0'}</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">{currency1Symbol || 'Token1'}</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Fees {currency0Symbol || 'T0'}</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Fees {currency1Symbol || 'T1'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each gridOrders as order, i}
-                {@const amounts = poolState ? orderAmounts(order, effectiveTick) : { amount0: 0n, amount1: 0n }}
-                {@const fees = orderFees[i] ?? { fees0: 0n, fees1: 0n }}
+        <button
+          class="mb-4 flex items-center justify-between w-full text-left bg-transparent border-none cursor-pointer p-0"
+          on:click={() => (showGridOrdersTable = !showGridOrdersTable)}
+          aria-label={showGridOrdersTable ? 'Collapse grid orders table' : 'Expand grid orders table'}
+        >
+          <h2 class="text-[1.15rem] font-extrabold">Grid Orders ({gridOrders.length})</h2>
+          <span class="text-muted text-lg">{showGridOrdersTable ? '\u25BE' : '\u25B8'}</span>
+        </button>
+        {#if showGridOrdersTable}
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-sm">
+              <thead>
                 <tr>
-                  <td class="py-2 px-3 border-b border-line">{i + 1}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono">{order.tickLower}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono">{order.tickUpper}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono">~{formatTokenAmount(amounts.amount0, currency0Decimals)}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono">~{formatTokenAmount(amounts.amount1, currency1Decimals)}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono text-green-400">~{formatTokenAmount(fees.fees0, currency0Decimals)}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono text-green-400">~{formatTokenAmount(fees.fees1, currency1Decimals)}</td>
+                  <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">#</th>
+                  <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Tick Lower</th>
+                  <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Tick Upper</th>
+                  <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">{currency0Symbol || 'Token0'}</th>
+                  <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">{currency1Symbol || 'Token1'}</th>
+                  <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Fees {currency0Symbol || 'T0'}</th>
+                  <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Fees {currency1Symbol || 'T1'}</th>
                 </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {#each gridOrders as order, i}
+                  {@const amounts = poolState ? orderAmounts(order, effectiveTick) : { amount0: 0n, amount1: 0n }}
+                  {@const fees = orderFees[i] ?? { fees0: 0n, fees1: 0n }}
+                  <tr>
+                    <td class="py-2 px-3 border-b border-line">{i + 1}</td>
+                    <td class="py-2 px-3 border-b border-line font-mono">{order.tickLower}</td>
+                    <td class="py-2 px-3 border-b border-line font-mono">{order.tickUpper}</td>
+                    <td class="py-2 px-3 border-b border-line font-mono">~{formatTokenAmount(amounts.amount0, currency0Decimals)}</td>
+                    <td class="py-2 px-3 border-b border-line font-mono">~{formatTokenAmount(amounts.amount1, currency1Decimals)}</td>
+                    <td class="py-2 px-3 border-b border-line font-mono text-green-400">~{formatTokenAmount(fees.fees0, currency0Decimals)}</td>
+                    <td class="py-2 px-3 border-b border-line font-mono text-green-400">~{formatTokenAmount(fees.fees1, currency1Decimals)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
       </section>
     {/if}
-
-    <!-- Actions -->
-    <section class={card}>
-      <h2 class="mb-4 text-[1.15rem] font-extrabold">Actions</h2>
-      {#if advancedMode}
-        <label class="flex flex-col gap-1 mb-4 max-w-[220px]">
-          <span class={labelCls}>Deadline (min from now)</span>
-          <input class={inputCls} type="number" bind:value={deadlineMinutes} min="1" max="60" />
-        </label>
-      {/if}
-      <div class="flex flex-wrap gap-3">
-        <button class={btnPrimary} on:click={handleRebalance} disabled={pendingRebalance}>
-          {pendingRebalance ? 'Rebalancing\u2026' : 'Rebalance'}
-        </button>
-        <button class={btnOutline} on:click={() => fetchPoolData()}>
-          Refresh Data
-        </button>
-        <button class={btnDanger} on:click={handleCloseGrid} disabled={pendingClose}>
-          {pendingClose ? 'Closing\u2026' : 'Close Grid'}
-        </button>
-      </div>
-    </section>
 
     <!-- Reconfigure (advanced mode) -->
     {#if advancedMode && $connected}
