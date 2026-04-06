@@ -2,7 +2,7 @@
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip } from 'chart.js';
   import type { Plugin } from 'chart.js';
-  import { tickToPrice } from '$lib/contracts/tickMath';
+  import { tickToPrice, getAmountsForLiquidity, getSqrtPriceAtTick, formatTokenAmount } from '$lib/contracts/tickMath';
 
   Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
 
@@ -29,6 +29,8 @@
   $: quoteSymbol = invertPrice ? token0Symbol : token1Symbol;
   $: priceLabel = (baseSymbol && quoteSymbol) ? `${quoteSymbol} per ${baseSymbol}` : 'Price';
   $: decimalAdjustment = Math.pow(10, token0Decimals - token1Decimals);
+  $: axisTokenSymbol = quoteSymbol || 'Token';
+  $: axisTokenDecimals = invertPrice ? token0Decimals : token1Decimals;
 
   function toDisplayPrice(tick: number): number {
     const raw = tickToPrice(tick) * decimalAdjustment;
@@ -41,6 +43,54 @@
     if (p >= 1) return p.toPrecision(6).replace(/\.?0+$/, '');
     if (p >= 0.0001) return p.toPrecision(4).replace(/\.?0+$/, '');
     return p.toExponential(2);
+  }
+
+  function orderTokenAmounts(order: { tickLower: number; tickUpper: number; liquidity: bigint }): { amount0: bigint; amount1: bigint } {
+    if (order.liquidity === 0n) return { amount0: 0n, amount1: 0n };
+    const tick = currentTick ?? Math.trunc((order.tickLower + order.tickUpper) / 2);
+    const sqrtPriceX96 = getSqrtPriceAtTick(tick);
+    const sqrtPriceAX96 = getSqrtPriceAtTick(order.tickLower);
+    const sqrtPriceBX96 = getSqrtPriceAtTick(order.tickUpper);
+    return getAmountsForLiquidity(sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, order.liquidity);
+  }
+
+  function valueTick(order: { tickLower: number; tickUpper: number }): number {
+    return currentTick ?? Math.trunc((order.tickLower + order.tickUpper) / 2);
+  }
+
+  function bigintToDecimalNumber(value: bigint, decimals: number): number {
+    const negative = value < 0n;
+    const abs = negative ? -value : value;
+    const digits = abs.toString();
+    if (decimals <= 0) return Number(negative ? `-${digits}` : digits);
+    const whole = digits.length > decimals ? digits.slice(0, digits.length - decimals) : '0';
+    const fracRaw = digits.length > decimals ? digits.slice(digits.length - decimals) : digits.padStart(decimals, '0');
+    const frac = fracRaw.replace(/0+$/, '');
+    const out = frac.length > 0 ? `${negative ? '-' : ''}${whole}.${frac}` : `${negative ? '-' : ''}${whole}`;
+    return Number(out);
+  }
+
+  function orderAxisAmount(order: { tickLower: number; tickUpper: number; liquidity: bigint }): number {
+    const amounts = orderTokenAmounts(order);
+    const tick = valueTick(order);
+    const priceInSelected = toDisplayPrice(tick);
+    const amount0 = bigintToDecimalNumber(amounts.amount0, token0Decimals);
+    const amount1 = bigintToDecimalNumber(amounts.amount1, token1Decimals);
+
+    // Settle both token legs into the selected quote currency.
+    // invertPrice=false => selected is token1, so total = token1 + token0 * (token1/token0)
+    // invertPrice=true  => selected is token0, so total = token0 + token1 * (token0/token1)
+    return invertPrice ? (amount0 + amount1 * priceInSelected) : (amount1 + amount0 * priceInSelected);
+  }
+
+  function formatAxisTick(value: number): string {
+    const v = Math.abs(value);
+    if (v >= 1e9) return `${(value / 1e9).toFixed(1).replace(/\.0$/, '')}B`;
+    if (v >= 1e6) return `${(value / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
+    if (v >= 1e3) return `${(value / 1e3).toFixed(1).replace(/\.0$/, '')}k`;
+    if (v === 0) return '0';
+    if (v >= 1) return value.toFixed(2).replace(/\.?0+$/, '');
+    return value.toPrecision(2).replace(/\.?0+$/, '');
   }
 
   // Custom plugin to draw vertical marker lines
@@ -110,7 +160,7 @@
       // When inverted, lower tick maps to higher price, so swap display order
       return invertPrice ? `${pHi}..${pLo}` : `${pLo}..${pHi}`;
     });
-    const data = orders.map((o) => Number(o.liquidity));
+    const data = orders.map((o) => orderAxisAmount(o));
 
     chart = new Chart(canvas, {
       type: 'bar',
@@ -141,10 +191,12 @@
                 const pLo = formatPrice(toDisplayPrice(o.tickLower));
                 const pHi = formatPrice(toDisplayPrice(o.tickUpper));
                 const range = invertPrice ? `[${pHi}, ${pLo}]` : `[${pLo}, ${pHi}]`;
+                const amounts = orderTokenAmounts(o);
+                const selectedAmount = orderAxisAmount(o);
                 return [
                   `Price: ${range}`,
                   `Ticks: [${o.tickLower}, ${o.tickUpper}]`,
-                  `Liquidity: ${o.liquidity.toString()}`,
+                  `Total: ~${formatAxisTick(selectedAmount)} ${axisTokenSymbol}`,
                 ];
               },
             },
@@ -165,10 +217,17 @@
           y: {
             display: true,
             beginAtZero: true,
+            title: {
+              display: true,
+              text: `Liquidity (~${axisTokenSymbol})`,
+              color: MUTED,
+              font: { size: 10, weight: 'bold' },
+            },
             ticks: {
               color: MUTED,
               font: { size: 9 },
               maxTicksLimit: 5,
+              callback: (value) => formatAxisTick(Number(value)),
             },
             grid: {
               color: 'rgba(29,38,31,0.08)',
