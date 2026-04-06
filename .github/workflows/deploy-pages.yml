@@ -34,6 +34,12 @@ jobs:
 
       - name: Build site
         run: yarn build
+        env:
+          VITE_GRIDHOOK_ADDRESS_UNICHAIN: ${{ vars.VITE_GRIDHOOK_ADDRESS_UNICHAIN }}
+          VITE_SWAP_ROUTER_ADDRESS_UNICHAIN: ${{ vars.VITE_SWAP_ROUTER_ADDRESS_UNICHAIN }}
+          VITE_RPC_URL_UNICHAIN: ${{ secrets.VITE_RPC_URL_UNICHAIN }}
+          VITE_WALLETCONNECT_PROJECT_ID: ${{ secrets.VITE_WALLETCONNECT_PROJECT_ID }}
+          BASE_PATH: ${{ vars.BASE_PATH }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
