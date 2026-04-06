@@ -9,6 +9,8 @@
 
   let connecting = false;
 
+  const baseUrl = import.meta.env.BASE_URL;
+
   async function handleConnect() {
     connecting = true;
     try {
@@ -32,7 +34,7 @@
 <header class="sticky top-0 z-100 backdrop-blur-lg bg-surface border-b border-line">
   <div class="flex items-center justify-between max-w-[1080px] mx-auto py-3 px-4">
     <div class="flex items-center gap-2">
-      <span class="w-6 h-6 bg-accent rounded-full"><img src="/logo.svg" alt="Uni Grid Logo" /></span>
+      <span class="w-6 h-6 bg-accent rounded-full"><img src="{baseUrl}logo.svg" alt="Uni Grid Logo" /></span>
       <span class="font-extrabold text-[1.1rem]">Uni Grid</span>
     </div>
 
