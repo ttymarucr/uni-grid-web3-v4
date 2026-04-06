@@ -54,6 +54,29 @@ export interface GridOrder {
   liquidity: bigint;
 }
 
+export interface OrderFees {
+  fees0: bigint;
+  fees1: bigint;
+}
+
+interface OrderFeeData {
+  liquidity: bigint;
+  feeGrowthInside0X128: bigint;
+  feeGrowthInside1X128: bigint;
+  feeGrowthInside0LastX128: bigint;
+  feeGrowthInside1LastX128: bigint;
+}
+
+const Q128 = 1n << 128n;
+
+function computeFees(d: OrderFeeData): OrderFees {
+  if (d.liquidity === 0n) return { fees0: 0n, fees1: 0n };
+  return {
+    fees0: ((d.feeGrowthInside0X128 - d.feeGrowthInside0LastX128) * d.liquidity) / Q128,
+    fees1: ((d.feeGrowthInside1X128 - d.feeGrowthInside1LastX128) * d.liquidity) / Q128,
+  };
+}
+
 const abi = gridHookAbi as readonly any[];
 
 // ── Read functions ──
@@ -120,6 +143,22 @@ export async function getGridOrders(hookAddress: Address, key: PoolKey, user: Ad
   }));
 }
 
+export async function getAccumulatedFees(hookAddress: Address, key: PoolKey, user: Address): Promise<OrderFees[]> {
+  const result = await readContract(cfg(), {
+    address: hookAddress,
+    abi,
+    functionName: 'getAccumulatedFees',
+    args: [key, user],
+  });
+  return (result as any[]).map((f: any) => computeFees({
+    liquidity: BigInt(f.liquidity),
+    feeGrowthInside0X128: BigInt(f.feeGrowthInside0X128),
+    feeGrowthInside1X128: BigInt(f.feeGrowthInside1X128),
+    feeGrowthInside0LastX128: BigInt(f.feeGrowthInside0LastX128),
+    feeGrowthInside1LastX128: BigInt(f.feeGrowthInside1LastX128),
+  }));
+}
+
 export async function getPlannedWeights(hookAddress: Address, key: PoolKey, user: Address): Promise<bigint[]> {
   const result = await readContract(cfg(), {
     address: hookAddress,
@@ -130,40 +169,162 @@ export async function getPlannedWeights(hookAddress: Address, key: PoolKey, user
   return (result as any[]).map((w: any) => BigInt(w));
 }
 
-export async function previewWeights(
-  hookAddress: Address,
-  gridLength: number,
-  distributionType: number
-): Promise<bigint[]> {
-  const result = await readContract(cfg(), {
-    address: hookAddress,
-    abi,
-    functionName: 'previewWeights',
-    args: [BigInt(gridLength), distributionType],
-  });
-  return (result as any[]).map((w: any) => BigInt(w));
+// ── Pure computation functions (ported from Solidity) ──
+
+const TOTAL_BPS = 10_000n;
+const MIN_TICK = -887272;
+const MAX_TICK = 887272;
+
+export enum DistributionType {
+  FLAT = 0,
+  LINEAR = 1,
+  REVERSE_LINEAR = 2,
+  FIBONACCI = 3,
+  SIGMOID = 4,
+  LOGARITHMIC = 5,
 }
 
-export async function computeGridOrders(
-  hookAddress: Address,
+function lnScaled(x: bigint): bigint {
+  let log2Int = 0n;
+  let v = x;
+  for (const shift of [128n, 64n, 32n, 16n, 8n, 4n, 2n, 1n]) {
+    const half = v >> shift;
+    if (half > 0n) {
+      log2Int |= shift;
+      v = half;
+    }
+  }
+  const power = 1n << log2Int;
+  const frac = ((x - power) * 10_000n) / power;
+  const log2Scaled = log2Int * 10_000n + frac;
+  return (log2Scaled * 6931n) / 10_000n;
+}
+
+export function previewWeights(gridLength: number, distributionType: number): bigint[] {
+  const n = BigInt(gridLength);
+  if (n === 0n || n > 1000n) throw new Error('InvalidGridLength');
+  const weights = new Array<bigint>(gridLength).fill(0n);
+
+  if (distributionType === DistributionType.FLAT) {
+    const eq = TOTAL_BPS / n;
+    for (let i = 0; i < gridLength; i++) weights[i] = eq;
+    return weights;
+  }
+
+  if (distributionType === DistributionType.LINEAR) {
+    const denom = (n * (n + 1n)) / 2n;
+    for (let i = 0; i < gridLength; i++) weights[i] = ((BigInt(i) + 1n) * TOTAL_BPS) / denom;
+    return weights;
+  }
+
+  if (distributionType === DistributionType.REVERSE_LINEAR) {
+    const denom = (n * (n + 1n)) / 2n;
+    for (let i = 0; i < gridLength; i++) weights[i] = ((n - BigInt(i)) * TOTAL_BPS) / denom;
+    return weights;
+  }
+
+  if (distributionType === DistributionType.SIGMOID) {
+    const SCALE = 1_000_000n;
+    const steepness = 10n;
+    const halfSteepnessScaled = (steepness * SCALE) / 2n;
+    const divisor = n > 1n ? n - 1n : 1n;
+    const HALF = SCALE / 2n;
+    const THRESHOLD = (5n * SCALE) / 2n;
+    const FIVE_SCALE = 5n * SCALE;
+    let total = 0n;
+
+    for (let i = 0; i < gridLength; i++) {
+      let x: bigint;
+      if (n === 1n) {
+        x = 0n;
+      } else {
+        x = (steepness * SCALE * BigInt(i)) / divisor - halfSteepnessScaled;
+      }
+      let value: bigint;
+      if (x < -THRESHOLD) {
+        value = 1n;
+      } else if (x > THRESHOLD) {
+        value = SCALE;
+      } else {
+        const result = HALF + (x * SCALE) / FIVE_SCALE;
+        value = result > 0n ? result : 1n;
+      }
+      weights[i] = value;
+      total += value;
+    }
+    for (let i = 0; i < gridLength; i++) weights[i] = (weights[i] * TOTAL_BPS) / total;
+    return weights;
+  }
+
+  if (distributionType === DistributionType.LOGARITHMIC) {
+    let total = 0n;
+    for (let i = 0; i < gridLength; i++) {
+      const value = lnScaled(BigInt(i) + 2n);
+      weights[i] = value;
+      total += value;
+    }
+    for (let i = 0; i < gridLength; i++) weights[i] = (weights[i] * TOTAL_BPS) / total;
+    return weights;
+  }
+
+  // Fibonacci (default)
+  if (gridLength === 1) {
+    weights[0] = TOTAL_BPS;
+    return weights;
+  }
+  let total = 2n;
+  weights[0] = 1n;
+  weights[1] = 1n;
+  let prev = 1n;
+  let curr = 1n;
+  for (let i = 2; i < gridLength; i++) {
+    const next = prev + curr;
+    weights[i] = next;
+    total += next;
+    prev = curr;
+    curr = next;
+  }
+  for (let i = 0; i < gridLength; i++) weights[i] = (weights[i] * TOTAL_BPS) / total;
+  return weights;
+}
+
+function alignTick(tick: number, tickSpacing: number): number {
+  let compressed = Math.trunc(tick / tickSpacing);
+  if (tick < 0 && tick % tickSpacing !== 0) compressed--;
+  return compressed * tickSpacing;
+}
+
+export function computeGridOrders(
   centerTick: number,
   gridSpacing: number,
   tickSpacing: number,
   maxOrders: number,
   weights: bigint[],
-  totalLiquidity: bigint
-): Promise<GridOrder[]> {
-  const result = await readContract(cfg(), {
-    address: hookAddress,
-    abi,
-    functionName: 'computeGridOrders',
-    args: [centerTick, gridSpacing, tickSpacing, maxOrders, weights, totalLiquidity],
-  });
-  return (result as any[]).map((o: any) => ({
-    tickLower: Number(o.tickLower),
-    tickUpper: Number(o.tickUpper),
-    liquidity: BigInt(o.liquidity),
-  }));
+  totalLiquidity: bigint,
+): GridOrder[] {
+  const orders: GridOrder[] = [];
+  const halfOrders = Math.trunc(maxOrders / 2);
+  const bottomTick = alignTick(centerTick - halfOrders * gridSpacing, tickSpacing);
+  const topTick = bottomTick + maxOrders * gridSpacing;
+
+  if (bottomTick < MIN_TICK || topTick > MAX_TICK) {
+    throw new Error('TickRangeOutOfBounds');
+  }
+
+  let distributed = 0n;
+  for (let i = 0; i < maxOrders; i++) {
+    const tickLower = bottomTick + i * gridSpacing;
+    const tickUpper = tickLower + gridSpacing;
+    let liquidity: bigint;
+    if (i === maxOrders - 1) {
+      liquidity = totalLiquidity - distributed;
+    } else {
+      liquidity = (totalLiquidity * weights[i]) / 10_000n;
+      distributed += liquidity;
+    }
+    orders.push({ tickLower, tickUpper, liquidity });
+  }
+  return orders;
 }
 
 export async function isRebalanceKeeper(hookAddress: Address, user: Address, keeper: Address): Promise<boolean> {

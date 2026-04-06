@@ -15,6 +15,7 @@
     "@wagmi/core": "^3.4.1",
     "chart.js": "^4.4.7",
     "svelte": "^4.2.19",
+    "svelte-spa-router": "^4.0.2",
     "viem": "^2.47.6"
   },
   "devDependencies": {

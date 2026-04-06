@@ -16,7 +16,6 @@
     "baseUrl": ".",
     "paths": {
       "$lib/*": ["src/lib/*"],
-      "$routes/*": ["src/routes/*"],
       "$static/*": ["static/*"]
     }
   },

@@ -19,7 +19,6 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       $lib: '/src/lib',
-      $routes: '/src/routes',
     },
   },
 }));

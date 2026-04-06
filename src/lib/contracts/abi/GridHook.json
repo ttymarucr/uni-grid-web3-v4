@@ -853,101 +853,6 @@
   },
   {
     "type": "function",
-    "name": "computeGridOrders",
-    "inputs": [
-      {
-        "name": "centerTick",
-        "type": "int24",
-        "internalType": "int24"
-      },
-      {
-        "name": "gridSpacing",
-        "type": "int24",
-        "internalType": "int24"
-      },
-      {
-        "name": "tickSpacing",
-        "type": "int24",
-        "internalType": "int24"
-      },
-      {
-        "name": "maxOrders",
-        "type": "uint24",
-        "internalType": "uint24"
-      },
-      {
-        "name": "weights",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      },
-      {
-        "name": "totalLiquidity",
-        "type": "uint128",
-        "internalType": "uint128"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple[]",
-        "internalType": "struct GridTypes.GridOrder[]",
-        "components": [
-          {
-            "name": "tickLower",
-            "type": "int24",
-            "internalType": "int24"
-          },
-          {
-            "name": "tickUpper",
-            "type": "int24",
-            "internalType": "int24"
-          },
-          {
-            "name": "liquidity",
-            "type": "uint128",
-            "internalType": "uint128"
-          }
-        ]
-      }
-    ],
-    "stateMutability": "pure"
-  },
-  {
-    "type": "function",
-    "name": "computePositionKey",
-    "inputs": [
-      {
-        "name": "owner",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "tickLower",
-        "type": "int24",
-        "internalType": "int24"
-      },
-      {
-        "name": "tickUpper",
-        "type": "int24",
-        "internalType": "int24"
-      },
-      {
-        "name": "salt",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "stateMutability": "pure"
-  },
-  {
-    "type": "function",
     "name": "deployGrid",
     "inputs": [
       {
@@ -1156,6 +1061,84 @@
             "name": "liquidity",
             "type": "uint128",
             "internalType": "uint128"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getAccumulatedFees",
+    "inputs": [
+      {
+        "name": "key",
+        "type": "tuple",
+        "internalType": "struct PoolKey",
+        "components": [
+          {
+            "name": "currency0",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "currency1",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "fee",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "tickSpacing",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "hooks",
+            "type": "address",
+            "internalType": "contract IHooks"
+          }
+        ]
+      },
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "perOrderFeeData",
+        "type": "tuple[]",
+        "internalType": "struct GridHook.OrderFeeData[]",
+        "components": [
+          {
+            "name": "liquidity",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "feeGrowthInside0X128",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "feeGrowthInside1X128",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "feeGrowthInside0LastX128",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "feeGrowthInside1LastX128",
+            "type": "uint256",
+            "internalType": "uint256"
           }
         ]
       }
@@ -1692,30 +1675,6 @@
   },
   {
     "type": "function",
-    "name": "previewWeights",
-    "inputs": [
-      {
-        "name": "gridLength",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "distributionType",
-        "type": "uint8",
-        "internalType": "enum GridTypes.DistributionType"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
-    ],
-    "stateMutability": "pure"
-  },
-  {
-    "type": "function",
     "name": "rebalance",
     "inputs": [
       {
@@ -1763,19 +1722,6 @@
     ],
     "outputs": [],
     "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "requiredHookFlags",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint160",
-        "internalType": "uint160"
-      }
-    ],
-    "stateMutability": "pure"
   },
   {
     "type": "function",

@@ -6,19 +6,10 @@
   import {
     getGridConfig,
     getPoolState,
-    getUserState,
-    getGridOrders,
-    getPlannedWeights,
-    previewWeights,
-    computeGridOrders,
     setGridConfig as writeSetGridConfig,
     deployGrid as writeDeployGrid,
-    rebalance as writeRebalance,
-    closeGrid as writeCloseGrid,
-    setRebalanceKeeper as writeSetKeeper,
     getDeadline,
     isGridConfigEqual,
-    getPoolManagerSlot0,
     getPoolManagerAddress,
     initializePool,
     type PoolKey,
@@ -32,12 +23,36 @@
     getTokenAllowanceForPermit2,
     grantPermit2Allowance,
     getPermit2Allowance,
-    getTokenBalance,
-    getTokenDecimals,
   } from '$lib/contracts/permit2';
+  import {
+    WIZARD_STEPS,
+    SLIPPAGE_OPTIONS,
+    FEE_OPTIONS,
+    resolveTickSpacingFromFee,
+    tokenLabel,
+    mismatchBps,
+    parseBpsInput,
+  } from '$lib/contracts/gridUiShared';
   import { getPresetsForChain, isNativeToken } from '$lib/contracts/poolPresets';
   import { getTokenAmountsForOrders, formatTokenAmount, parseTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, tickToPrice } from '$lib/contracts/tickMath';
   import { STRATEGY_PRESETS, DIST_LABELS, DIST_DESCRIPTIONS } from '$lib/contracts/strategyPresets';
+  import {
+    areTokenDecimalsReady as areTokenDecimalsReadyShared,
+    applyTickSpacingFromFee as applyTickSpacingFromFeeShared,
+    buildPoolKey as buildPoolKeyShared,
+    buildDesiredGridConfig as buildDesiredGridConfigShared,
+    getNativeDeployValue as getNativeDeployValueShared,
+    createChainResetState,
+    resolveTokenDecimalsForSelectionAction,
+    fetchTokenBalancesAction,
+    fetchReferenceTickAction,
+    computeReferenceAmountsAction,
+    fetchPoolDataAction,
+    previewWeightsAction,
+    computeGridOrdersPreviewAction,
+    computeLiquidityFromAmount0,
+    computeLiquidityFromAmount1,
+  } from '$lib/stores/gridController';
   import WeightChart from './WeightChart.svelte';
   import GridOrdersChart from './GridOrdersChart.svelte';
   import type { Address } from 'viem';
@@ -52,94 +67,11 @@
   const statLabel = 'text-[0.72rem] font-bold text-muted uppercase tracking-wider';
 
   // ── State machine ──
-  let view: 'positions' | 'wizard' | 'manage' = 'positions';
+  let view: 'wizard' = 'wizard';
   let wizardStep = 1;
   let advancedMode = false;
-  const WIZARD_STEPS = ['Pool', 'Strategy', 'Preview', 'Deploy'];
-  const SLIPPAGE_OPTIONS = [
-    { label: 'None', value: '0' },
-    { label: '0.1%', value: '10' },
-    { label: '0.5%', value: '50' },
-    { label: '1%', value: '100' },
-    { label: '3%', value: '300' },
-  ];
-  const FEE_OPTIONS = [
-    { label: '0.01%', value: 100 },
-    { label: '0.05%', value: 500 },
-    { label: '0.3%', value: 3000 },
-    { label: '1%', value: 10000 },
-  ];
-  const FEE_TO_TICK_SPACING: Record<number, number> = {
-    100: 1,
-    500: 10,
-    3000: 60,
-    10000: 200,
-  };
 
-  // ── Deployed positions ──
-  interface DeployedPosition {
-    preset: import('$lib/contracts/poolPresets').PoolPreset;
-    poolState: PoolState;
-    userState: UserGridState;
-    gridConfig: GridConfig;
-    orderCount: number;
-    activeOrders: number;
-  }
-  let deployedPositions: DeployedPosition[] = [];
-  let scanningPositions = false;
-  let hasScanned = false;
-
-  async function scanDeployedPositions() {
-    const user = $signerAddress as Address;
-    if (!user || !hookAddress) return;
-    scanningPositions = true;
-    const found: DeployedPosition[] = [];
-    const chainPresets = getPresetsForChain($chainIdStore);
-    await Promise.all(
-      chainPresets.map(async (preset) => {
-        try {
-          const key: PoolKey = {
-            currency0: preset.currency0,
-            currency1: preset.currency1,
-            fee: preset.fee,
-            tickSpacing: preset.tickSpacing,
-            hooks: hookAddress,
-          };
-          const us = await getUserState(hookAddress, key, user);
-          if (!us.deployed) return;
-          const [ps, cfg, orders] = await Promise.all([
-            getPoolState(hookAddress, key),
-            getGridConfig(hookAddress, key, user),
-            getGridOrders(hookAddress, key, user),
-          ]);
-          found.push({
-            preset,
-            poolState: ps,
-            userState: us,
-            gridConfig: cfg,
-            orderCount: orders.length,
-            activeOrders: orders.filter(o => o.liquidity > 0n).length,
-          });
-        } catch {
-          // Skip pools that fail (not initialized, etc.)
-        }
-      }),
-    );
-    deployedPositions = found;
-    scanningPositions = false;
-    hasScanned = true;
-  }
-
-  // Scan on connect
-  $: if ($connected && $signerAddress && hookAddress) {
-    scanDeployedPositions();
-  }
-
-  // After scan, if no positions found, go to wizard
-  $: if (hasScanned && view === 'positions' && deployedPositions.length === 0) {
-    view = 'wizard';
-    wizardStep = 1;
-  }
+  import { push, link } from 'svelte-spa-router';
 
   // ── Hook address ──
   $: hookAddress = getGridHookAddress($chainIdStore);
@@ -179,74 +111,39 @@
     }
   }
 
-  function hasValidTokenDecimals(value: number): boolean {
-    return Number.isInteger(value) && value >= 0 && value <= 255;
-  }
-
   function areTokenDecimalsReady(): boolean {
-    return hasValidTokenDecimals(currency0Decimals)
-      && hasValidTokenDecimals(currency1Decimals)
-      && currency0DecimalsResolved
-      && currency1DecimalsResolved;
+    return areTokenDecimalsReadyShared({
+      currency0Decimals,
+      currency1Decimals,
+      currency0DecimalsResolved,
+      currency1DecimalsResolved,
+    });
   }
 
   async function resolveTokenDecimalsForSelection(): Promise<boolean> {
     const selectedPreset = selectedPresetIdx >= 0 ? presets[selectedPresetIdx] : undefined;
-    const strictForCustom = !selectedPreset;
-
-    const resolveOne = async (
-      tokenAddress: string,
-      currentDecimals: number,
-      tokenLabelName: string,
-      isPresetToken: boolean,
-    ): Promise<{ ok: boolean; decimals: number; resolved: boolean }> => {
-      const cacheKey = `${$chainIdStore ?? 0}:${tokenAddress.toLowerCase()}`;
-      const cached = tokenDecimalsCache.get(cacheKey);
-      if (cached != null) return { ok: true, decimals: cached, resolved: true };
-
-      const onChainDecimals = await getTokenDecimals(tokenAddress as Address);
-      if (onChainDecimals == null || !hasValidTokenDecimals(onChainDecimals)) {
-        if (strictForCustom) {
-          addToast('error', `Could not resolve decimals for ${tokenLabelName}. Please verify the token address.`);
-          return { ok: false, decimals: currentDecimals, resolved: false };
-        }
-        addToast('info', `Could not verify on-chain decimals for ${tokenLabelName}; using preset decimals.`);
-        return { ok: true, decimals: currentDecimals, resolved: isPresetToken };
-      }
-
-      tokenDecimalsCache.set(cacheKey, onChainDecimals);
-      if (isPresetToken && onChainDecimals !== currentDecimals) {
-        addToast('info', `${tokenLabelName} decimals updated from ${currentDecimals} to ${onChainDecimals} using on-chain metadata.`);
-      }
-      return { ok: true, decimals: onChainDecimals, resolved: true };
-    };
-
-    const token0Name = tokenLabel(currency0Symbol, currency0);
-    const token1Name = tokenLabel(currency1Symbol, currency1);
-
-    const [t0, t1] = await Promise.all([
-      resolveOne(currency0, currency0Decimals, token0Name, Boolean(selectedPreset)),
-      resolveOne(currency1, currency1Decimals, token1Name, Boolean(selectedPreset)),
-    ]);
-
-    if (!t0.ok || !t1.ok) return false;
-
-    currency0Decimals = t0.decimals;
-    currency1Decimals = t1.decimals;
-    currency0DecimalsResolved = t0.resolved;
-    currency1DecimalsResolved = t1.resolved;
+    const result = await resolveTokenDecimalsForSelectionAction({
+      chainId: $chainIdStore ?? 0,
+      selectedPreset,
+      currency0,
+      currency1,
+      currency0Symbol,
+      currency1Symbol,
+      currency0Decimals,
+      currency1Decimals,
+      tokenDecimalsCache,
+      addToast,
+    });
+    if (!result.ok) return false;
+    currency0Decimals = result.currency0Decimals;
+    currency1Decimals = result.currency1Decimals;
+    currency0DecimalsResolved = result.currency0DecimalsResolved;
+    currency1DecimalsResolved = result.currency1DecimalsResolved;
     return true;
   }
 
-  function resolveTickSpacingFromFee(nextFee: number): number | null {
-    if (!Number.isFinite(nextFee)) return null;
-    return FEE_TO_TICK_SPACING[nextFee] ?? null;
-  }
-
   function applyTickSpacingFromFee(nextFee: number) {
-    const resolved = resolveTickSpacingFromFee(nextFee);
-    if (resolved == null || tickSpacing === resolved) return;
-    tickSpacing = resolved;
+    tickSpacing = applyTickSpacingFromFeeShared(nextFee, tickSpacing);
   }
 
   function onFeeSelectChange(e: Event) {
@@ -268,56 +165,49 @@
     applyTickSpacingFromFee(fee);
   }
 
-  function tokenLabel(symbol: string, addr: string): string {
-    if (symbol) return symbol;
-    if (!addr) return '\u2014';
-    return `${addr.slice(0, 6)}\u2026${addr.slice(-4)}`;
-  }
-
   function isNativeCurrency(addr: string): boolean {
     return isNativeToken(addr as Address);
   }
 
   function buildPoolKey(): PoolKey {
-    return {
-      currency0: currency0 as Address,
-      currency1: currency1 as Address,
+    return buildPoolKeyShared({
+      currency0,
+      currency1,
       fee,
       tickSpacing,
-      hooks: hookAddress,
-    };
+      hookAddress,
+    });
   }
 
   // ── Chain change detection ──
   let prevChain = $chainIdStore;
   $: if ($chainIdStore !== prevChain) {
     prevChain = $chainIdStore;
-    selectedPresetIdx = -1;
-    currency0 = '';
-    currency1 = '';
-    currency0Symbol = '';
-    currency1Symbol = '';
-    currency0Decimals = 18;
-    currency1Decimals = 18;
-    currency0DecimalsResolved = false;
-    currency1DecimalsResolved = false;
+    const reset = createChainResetState('wizard');
+    selectedPresetIdx = reset.selectedPresetIdx;
+    currency0 = reset.currency0;
+    currency1 = reset.currency1;
+    currency0Symbol = reset.currency0Symbol;
+    currency1Symbol = reset.currency1Symbol;
+    currency0Decimals = reset.currency0Decimals;
+    currency1Decimals = reset.currency1Decimals;
+    currency0DecimalsResolved = reset.currency0DecimalsResolved;
+    currency1DecimalsResolved = reset.currency1DecimalsResolved;
     tokenDecimalsCache.clear();
-    inputAmount0 = '';
-    inputAmount1 = '';
-    balance0 = 0n;
-    balance1 = 0n;
-    refAmount0 = 0n;
-    refAmount1 = 0n;
-    poolState = null;
-    userState = null;
-    gridConfig = null;
-    gridOrders = [];
-    plannedWeights = [];
-    referenceTick = null;
-    deployedPositions = [];
-    hasScanned = false;
-    view = 'positions';
-    wizardStep = 1;
+    inputAmount0 = reset.inputAmount0;
+    inputAmount1 = reset.inputAmount1;
+    balance0 = reset.balance0;
+    balance1 = reset.balance1;
+    refAmount0 = reset.refAmount0;
+    refAmount1 = reset.refAmount1;
+    poolState = reset.poolState;
+    userState = reset.userState;
+    gridConfig = reset.gridConfig;
+    gridOrders = reset.gridOrders;
+    plannedWeights = reset.plannedWeights;
+    referenceTick = reset.referenceTick;
+    view = 'wizard';
+    wizardStep = reset.wizardStep;
   }
 
   // ── Strategy state ──
@@ -439,12 +329,11 @@
     if (!user || !currency0 || !currency1) return;
     loadingBalances = true;
     try {
-      const [b0, b1] = await Promise.all([
-        getTokenBalance(currency0 as Address, user),
-        getTokenBalance(currency1 as Address, user),
-      ]);
-      balance0 = b0;
-      balance1 = b1;
+      const balances = await fetchTokenBalancesAction({ user, currency0, currency1 });
+      if (balances) {
+        balance0 = balances.balance0;
+        balance1 = balances.balance1;
+      }
     } catch {
       // Silent — balance display is best-effort
     } finally {
@@ -455,40 +344,31 @@
   async function fetchReferenceTick() {
     if (!hookAddress || !currency0 || !currency1) return;
     try {
-      const refKey: PoolKey = {
-        currency0: currency0 as Address,
-        currency1: currency1 as Address,
+      referenceTick = await fetchReferenceTickAction({
+        hookAddress,
+        currency0,
+        currency1,
         fee,
         tickSpacing,
-        hooks: '0x0000000000000000000000000000000000000000' as Address,
-      };
-      const slot0 = await getPoolManagerSlot0(hookAddress, refKey);
-      if (slot0.sqrtPriceX96 > 0n) {
-        referenceTick = slot0.tick;
-      } else {
-        referenceTick = null;
-      }
+      });
     } catch {
       referenceTick = null;
     }
   }
 
-  async function computeReferenceAmounts() {
-    if (!hookAddress || !poolState || previewedWeights.length === 0) return;
-    const tick = effectiveTick;
+  function computeReferenceAmounts() {
+    if (!poolState || previewedWeights.length === 0) return;
     try {
-      const refOrders = await computeGridOrders(
-        hookAddress,
-        tick,
+      const amounts = computeReferenceAmountsAction({
+        effectiveTick,
         cfgGridSpacing,
         tickSpacing,
         cfgMaxOrders,
         previewedWeights,
-        REF_LIQUIDITY,
-      );
-      const { totalAmount0, totalAmount1 } = getTokenAmountsForOrders(refOrders, tick);
-      refAmount0 = totalAmount0;
-      refAmount1 = totalAmount1;
+        refLiquidity: REF_LIQUIDITY,
+      });
+      refAmount0 = amounts.refAmount0;
+      refAmount1 = amounts.refAmount1;
     } catch {
       refAmount0 = 0n;
       refAmount1 = 0n;
@@ -496,35 +376,27 @@
   }
 
   function computeFromAmount0(raw0: bigint) {
-    if (raw0 === 0n || refAmount0 === 0n) {
-      deployLiquidity = '';
-      inputAmount1 = '';
-      return;
-    }
-    const liq = (raw0 * REF_LIQUIDITY) / refAmount0;
-    deployLiquidity = liq.toString();
-    if (refAmount1 > 0n) {
-      const derived1 = (liq * refAmount1) / REF_LIQUIDITY;
-      inputAmount1 = formatTokenAmount(derived1, currency1Decimals);
-    } else {
-      inputAmount1 = '0';
-    }
+    const next = computeLiquidityFromAmount0({
+      raw0,
+      refAmount0,
+      refAmount1,
+      refLiquidity: REF_LIQUIDITY,
+      currency1Decimals,
+    });
+    deployLiquidity = next.deployLiquidity;
+    inputAmount1 = next.derivedAmount1Text;
   }
 
   function computeFromAmount1(raw1: bigint) {
-    if (raw1 === 0n || refAmount1 === 0n) {
-      deployLiquidity = '';
-      inputAmount0 = '';
-      return;
-    }
-    const liq = (raw1 * REF_LIQUIDITY) / refAmount1;
-    deployLiquidity = liq.toString();
-    if (refAmount0 > 0n) {
-      const derived0 = (liq * refAmount0) / REF_LIQUIDITY;
-      inputAmount0 = formatTokenAmount(derived0, currency0Decimals);
-    } else {
-      inputAmount0 = '0';
-    }
+    const next = computeLiquidityFromAmount1({
+      raw1,
+      refAmount0,
+      refAmount1,
+      refLiquidity: REF_LIQUIDITY,
+      currency0Decimals,
+    });
+    deployLiquidity = next.deployLiquidity;
+    inputAmount0 = next.derivedAmount0Text;
   }
 
   function onAmount0Input() {
@@ -564,37 +436,27 @@
     loadingData = true;
     try {
       const key = buildPoolKey();
-      const [ps, us] = await Promise.all([
-        getPoolState(hookAddress, key),
-        getUserState(hookAddress, key, user),
-      ]);
-      poolState = ps;
-      userState = us;
-
-      // Fetch reference tick from canonical pool when grid not initialized
-      if (!ps.initialized) {
-        await fetchReferenceTick();
-      } else {
-        referenceTick = null;
-      }
-
-      if (us.deployed) {
-        const [cfg, orders, weights] = await Promise.all([
-          getGridConfig(hookAddress, key, user),
-          getGridOrders(hookAddress, key, user),
-          getPlannedWeights(hookAddress, key, user),
-        ]);
-        gridConfig = cfg;
-        gridOrders = orders;
-        plannedWeights = weights;
-        // Sync local state from on-chain config
-        cfgGridSpacing = cfg.gridSpacing;
-        cfgMaxOrders = cfg.maxOrders;
-        cfgRebalanceBps = cfg.rebalanceThresholdBps;
-        cfgDistType = cfg.distributionType;
-        cfgAutoRebalance = cfg.autoRebalance;
-        cfgMaxSlippageDelta0 = formatTokenAmount(cfg.maxSlippageDelta0, currency0Decimals);
-        cfgMaxSlippageDelta1 = formatTokenAmount(cfg.maxSlippageDelta1, currency1Decimals);
+      const state = await fetchPoolDataAction({
+        hookAddress,
+        poolKey: key,
+        user,
+        currency0Decimals,
+        currency1Decimals,
+      });
+      poolState = state.poolState;
+      userState = state.userState;
+      gridConfig = state.gridConfig;
+      gridOrders = state.gridOrders;
+      plannedWeights = state.plannedWeights;
+      referenceTick = state.referenceTick;
+      if (state.syncedConfig) {
+        cfgGridSpacing = state.syncedConfig.cfgGridSpacing;
+        cfgMaxOrders = state.syncedConfig.cfgMaxOrders;
+        cfgRebalanceBps = state.syncedConfig.cfgRebalanceBps;
+        cfgDistType = state.syncedConfig.cfgDistType;
+        cfgAutoRebalance = state.syncedConfig.cfgAutoRebalance;
+        cfgMaxSlippageDelta0 = state.syncedConfig.cfgMaxSlippageDelta0;
+        cfgMaxSlippageDelta1 = state.syncedConfig.cfgMaxSlippageDelta1;
       }
       return true;
     } catch (e: any) {
@@ -612,64 +474,9 @@
     const ok = await fetchPoolData();
     if (!ok) return;
     if (userState?.deployed) {
-      view = 'manage';
+      push('/profile');
     } else {
       wizardStep = 2;
-    }
-  }
-
-  function openPosition(pos: DeployedPosition) {
-    currency0 = pos.preset.currency0;
-    currency1 = pos.preset.currency1;
-    fee = pos.preset.fee;
-    tickSpacing = pos.preset.tickSpacing;
-    currency0Symbol = pos.preset.currency0Symbol;
-    currency1Symbol = pos.preset.currency1Symbol;
-    currency0Decimals = pos.preset.currency0Decimals;
-    currency1Decimals = pos.preset.currency1Decimals;
-    currency0DecimalsResolved = true;
-    currency1DecimalsResolved = true;
-    selectedPresetIdx = presets.indexOf(pos.preset);
-    poolState = pos.poolState;
-    userState = pos.userState;
-    gridConfig = pos.gridConfig;
-    cfgGridSpacing = pos.gridConfig.gridSpacing;
-    cfgMaxOrders = pos.gridConfig.maxOrders;
-    cfgRebalanceBps = pos.gridConfig.rebalanceThresholdBps;
-    cfgDistType = pos.gridConfig.distributionType;
-    cfgAutoRebalance = pos.gridConfig.autoRebalance;
-    cfgMaxSlippageDelta0 = formatTokenAmount(pos.gridConfig.maxSlippageDelta0, currency0Decimals);
-    cfgMaxSlippageDelta1 = formatTokenAmount(pos.gridConfig.maxSlippageDelta1, currency1Decimals);
-    fetchPoolData();
-    view = 'manage';
-  }
-
-  function startNewGrid() {
-    selectedPresetIdx = -1;
-    currency0 = '';
-    currency1 = '';
-    currency0Symbol = '';
-    currency1Symbol = '';
-    currency0Decimals = 18;
-    currency1Decimals = 18;
-    currency0DecimalsResolved = false;
-    currency1DecimalsResolved = false;
-    poolState = null;
-    userState = null;
-    gridConfig = null;
-    gridOrders = [];
-    plannedWeights = [];
-    selectedStrategyIdx = -1;
-    view = 'wizard';
-    wizardStep = 1;
-  }
-
-  function goBackToPositions() {
-    if (deployedPositions.length > 0) {
-      view = 'positions';
-    } else {
-      view = 'wizard';
-      wizardStep = 1;
     }
   }
 
@@ -708,8 +515,11 @@
     if (!hookAddress || cfgMaxOrders < 1) return;
     loadingPreview = true;
     try {
-      previewedWeights = await previewWeights(hookAddress, cfgMaxOrders, cfgDistType);
-      await computeReferenceAmounts();
+      previewedWeights = previewWeightsAction({
+        cfgMaxOrders,
+        cfgDistType,
+      });
+      computeReferenceAmounts();
     } catch {
       // Silent — preview is best-effort
     } finally {
@@ -726,15 +536,14 @@
   async function handleComputeOrders() {
     if (!poolState || !deployLiquidity || previewedWeights.length === 0) return;
     try {
-      previewedOrders = await computeGridOrders(
-        hookAddress,
+      previewedOrders = computeGridOrdersPreviewAction({
         effectiveTick,
         cfgGridSpacing,
         tickSpacing,
         cfgMaxOrders,
         previewedWeights,
-        BigInt(deployLiquidity),
-      );
+        deployLiquidity,
+      });
     } catch (e: any) {
       addToast('error', `Order preview failed: ${e.shortMessage || e.message}`);
     }
@@ -752,34 +561,20 @@
   $: enteredAmount0Raw = parseTokenAmount(inputAmount0, currency0Decimals);
   $: enteredAmount1Raw = parseTokenAmount(inputAmount1, currency1Decimals);
 
-  function absBigInt(value: bigint): bigint {
-    return value < 0n ? -value : value;
-  }
-
-  function mismatchBps(entered: bigint, estimated: bigint): bigint {
-    if (entered === 0n && estimated === 0n) return 0n;
-    if (estimated === 0n) return 10000n;
-    const diff = absBigInt(entered - estimated);
-    return (diff * 10000n) / estimated;
-  }
-
   $: mismatch0Bps = mismatchBps(enteredAmount0Raw, estimatedAmounts.totalAmount0);
   $: mismatch1Bps = mismatchBps(enteredAmount1Raw, estimatedAmounts.totalAmount1);
   $: hasAmountMismatchWarning = mismatch0Bps > AMOUNT_MISMATCH_WARN_BPS || mismatch1Bps > AMOUNT_MISMATCH_WARN_BPS;
 
   function getNativeDeployValue(maxD0: bigint, maxD1: bigint): bigint {
-    let value = 0n;
-    if (isNativeCurrency(currency0)) value += estimatedAmounts.totalAmount0 + maxD0;
-    if (isNativeCurrency(currency1)) value += estimatedAmounts.totalAmount1 + maxD1;
-    return value;
-  }
-
-  function parseBpsInput(value: string): bigint {
-    try {
-      return BigInt(value || '0');
-    } catch {
-      return 0n;
-    }
+    return getNativeDeployValueShared({
+      currency0,
+      currency1,
+      estimatedAmount0: estimatedAmounts.totalAmount0,
+      estimatedAmount1: estimatedAmounts.totalAmount1,
+      maxDelta0: maxD0,
+      maxDelta1: maxD1,
+      isNativeCurrency,
+    });
   }
 
   $: nativeDeployValue = getNativeDeployValue(
@@ -805,15 +600,17 @@
 
   // ── Unified deploy flow ──
   function buildDesiredGridConfig(): GridConfig {
-    return {
-      gridSpacing: cfgGridSpacing,
-      maxOrders: cfgMaxOrders,
-      rebalanceThresholdBps: cfgRebalanceBps,
-      distributionType: cfgDistType,
-      autoRebalance: cfgAutoRebalance,
-      maxSlippageDelta0: parseTokenAmount(cfgMaxSlippageDelta0, currency0Decimals),
-      maxSlippageDelta1: parseTokenAmount(cfgMaxSlippageDelta1, currency1Decimals),
-    };
+    return buildDesiredGridConfigShared({
+      cfgGridSpacing,
+      cfgMaxOrders,
+      cfgRebalanceBps,
+      cfgDistType,
+      cfgAutoRebalance,
+      cfgMaxSlippageDelta0,
+      cfgMaxSlippageDelta1,
+      currency0Decimals,
+      currency1Decimals,
+    });
   }
 
   async function handleUnifiedDeploy() {
@@ -900,63 +697,13 @@
 
       addToast('success', 'Grid deployed successfully!');
       await fetchPoolData();
-      view = 'manage';
+      push('/profile');
     } catch (e: any) {
       addToast('error', `Deploy failed: ${e.shortMessage || e.message}`);
     } finally {
       deploying = false;
       deployStepLabel = '';
     }
-  }
-
-  // ── Management actions ──
-  let pendingRebalance = false;
-  let pendingClose = false;
-
-  async function handleRebalance() {
-    const user = $signerAddress as Address;
-    if (!user) return;
-    pendingRebalance = true;
-    await executeTransaction('Rebalance', () =>
-      writeRebalance(hookAddress, buildPoolKey(), user, getDeadline(deadlineMinutes)),
-    );
-    pendingRebalance = false;
-    await fetchPoolData();
-  }
-
-  async function handleCloseGrid() {
-    pendingClose = true;
-    await executeTransaction('Close Grid', () =>
-      writeCloseGrid(hookAddress, buildPoolKey(), getDeadline(deadlineMinutes)),
-    );
-    pendingClose = false;
-    poolState = null;
-    userState = null;
-    gridConfig = null;
-    gridOrders = [];
-    plannedWeights = [];
-    await scanDeployedPositions();
-    if (deployedPositions.length > 0) {
-      view = 'positions';
-    } else {
-      view = 'wizard';
-      wizardStep = 1;
-    }
-  }
-
-  // ── Keeper ──
-  let keeperAddress = '';
-  let keeperAuthorized = true;
-  let pendingKeeper = false;
-  let showKeeper = false;
-
-  async function handleSetKeeper() {
-    if (!keeperAddress) return;
-    pendingKeeper = true;
-    await executeTransaction(keeperAuthorized ? 'Authorize Keeper' : 'Revoke Keeper', () =>
-      writeSetKeeper(hookAddress, keeperAddress as Address, keeperAuthorized),
-    );
-    pendingKeeper = false;
   }
 
   // ── Advanced: individual Permit2 buttons ──
@@ -1025,8 +772,24 @@
 </script>
 
 <div class="max-w-[1080px] mx-auto px-4 pt-8 pb-16 flex flex-col gap-6">
-  <!-- Advanced mode toggle -->
-  <div class="flex justify-end">
+  <!-- Page switch + advanced mode toggle -->
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div class="flex items-center gap-2">
+      <a
+        href="/wizard"
+        use:link
+        class="px-3 py-1.5 text-[0.78rem] font-bold rounded-lg border transition-colors duration-150 border-accent text-accent bg-glow"
+      >
+        Wizard
+      </a>
+      <a
+        href="/profile"
+        use:link
+        class="px-3 py-1.5 text-[0.78rem] font-bold rounded-lg border transition-colors duration-150 border-line text-muted"
+      >
+        Profile
+      </a>
+    </div>
     <label class="flex items-center gap-2 cursor-pointer select-none">
       <span class="text-[0.78rem] text-muted">{advancedMode ? 'Advanced' : 'Simple'}</span>
       <div class="relative inline-flex items-center">
@@ -1037,70 +800,7 @@
     </label>
   </div>
 
-  {#if view === 'positions'}
-    <!-- ═══════════════════════════════════════ -->
-    <!-- ═══ POSITIONS VIEW ═══ -->
-    <!-- ═══════════════════════════════════════ -->
-
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <h2 class="text-[1.3rem] font-extrabold">Your Grids</h2>
-      <button class={btnPrimary} on:click={startNewGrid}>
-        <span class="inline-flex items-center gap-1.5">&#x1FA84; Deploy a new Grid</span>
-      </button>
-    </div>
-
-    {#if scanningPositions}
-      <div class="flex items-center gap-3 p-6">
-        <div class="animate-spin w-5 h-5 border-2 border-accent border-t-transparent rounded-full flex-shrink-0"></div>
-        <span class="text-sm text-muted">Scanning pools&hellip;</span>
-      </div>
-    {:else}
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {#each deployedPositions as pos}
-          <button
-            class="text-left p-5 rounded-[var(--radius-card)] border border-line bg-surface shadow-card hover:border-accent transition-colors duration-150 cursor-pointer"
-            on:click={() => openPosition(pos)}
-          >
-            <div class="flex items-center gap-2 mb-3">
-              <span class="text-lg">&#x1F4CA;</span>
-              <span class="font-extrabold text-text text-[1.05rem]">{pos.preset.label}</span>
-            </div>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-2">
-              <div class="flex flex-col gap-0.5">
-                <span class={statLabel}>Distribution</span>
-                <span class="text-sm font-semibold">{DIST_LABELS[pos.gridConfig.distributionType]}</span>
-              </div>
-              <div class="flex flex-col gap-0.5">
-                <span class={statLabel}>Orders</span>
-                <span class="text-sm font-semibold font-mono">{pos.activeOrders}<span class="text-muted font-normal">/{pos.orderCount}</span></span>
-              </div>
-              <div class="flex flex-col gap-0.5">
-                <span class={statLabel}>Center Tick</span>
-                <span class="text-sm font-semibold font-mono">{pos.userState.gridCenterTick}</span>
-              </div>
-              <div class="flex flex-col gap-0.5">
-                <span class={statLabel}>Current Tick</span>
-                <span class="text-sm font-semibold font-mono">{pos.poolState.currentTick}</span>
-              </div>
-              <div class="flex flex-col gap-0.5">
-                <span class={statLabel}>Spacing</span>
-                <span class="text-sm font-semibold font-mono">{pos.gridConfig.gridSpacing}</span>
-              </div>
-              <div class="flex flex-col gap-0.5">
-                <span class={statLabel}>Auto Rebalance</span>
-                <span class="text-sm font-semibold">{pos.gridConfig.autoRebalance ? 'On' : 'Off'}</span>
-              </div>
-            </div>
-            <div class="mt-3 pt-3 border-t border-line flex items-center justify-between">
-              <span class="text-[0.72rem] text-muted">Fee: {(pos.preset.fee / 10000).toFixed(2)}%</span>
-              <span class="text-[0.75rem] text-accent font-bold">Manage &rarr;</span>
-            </div>
-          </button>
-        {/each}
-      </div>
-    {/if}
-
-  {:else if view === 'wizard'}
+  {#if true}
     <!-- ═══ Wizard Stepper ═══ -->
     <nav class="flex items-center justify-center gap-0 mb-2">
       {#each WIZARD_STEPS as stepLabel, i}
@@ -1658,230 +1358,5 @@
         </section>
       {/if}
     {/if}
-
-  {:else}
-    <!-- ═══════════════════════════════════════ -->
-    <!-- ═══ MANAGEMENT VIEW ═══ -->
-    <!-- ═══════════════════════════════════════ -->
-
-    <!-- Pool header -->
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <h2 class="text-[1.3rem] font-extrabold">
-        {tokenLabel(currency0Symbol, currency0)} / {tokenLabel(currency1Symbol, currency1)} Grid
-      </h2>
-      <button
-        class="text-[0.8rem] text-accent hover:underline bg-transparent border-none cursor-pointer"
-        on:click={goBackToPositions}
-      >
-        &larr; {deployedPositions.length > 0 ? 'Your Grids' : 'Change Pool'}
-      </button>
-    </div>
-
-    <!-- Status cards -->
-    <section class={card}>
-      <h2 class="mb-4 text-[1.15rem] font-extrabold">Grid Status</h2>
-      <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
-        {#if poolState}
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>{usingReferenceTick ? 'Market Tick (approx.)' : 'Current Tick'}</span>
-            <span class="text-base font-semibold font-mono">{effectiveTick}{#if usingReferenceTick} <span class="text-[0.68rem] text-yellow-400 font-normal">via canonical pool</span>{/if}</span>
-          </div>
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>Initialized</span>
-            <span class="text-base font-semibold">{poolState.initialized ? 'Yes' : 'No'}</span>
-          </div>
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>Swap Count</span>
-            <span class="text-base font-semibold">{poolState.swapCount}</span>
-          </div>
-        {/if}
-        {#if userState}
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>Status</span>
-            <span class="text-base font-semibold text-accent">{userState.deployed ? 'Active' : 'Inactive'}</span>
-          </div>
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>Grid Center</span>
-            <span class="text-base font-semibold font-mono">{userState.gridCenterTick}</span>
-          </div>
-        {/if}
-        {#if gridConfig}
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>Distribution</span>
-            <span class="text-base font-semibold">{DIST_LABELS[gridConfig.distributionType]}</span>
-          </div>
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>Orders</span>
-            <span class="text-base font-semibold">{gridConfig.maxOrders}</span>
-          </div>
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>Auto Rebalance</span>
-            <span class="text-base font-semibold">{gridConfig.autoRebalance ? 'On' : 'Off'}</span>
-          </div>
-        {/if}
-        {#if gridOrders.length > 0 && (gridAmounts.totalAmount0 > 0n || gridAmounts.totalAmount1 > 0n)}
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>{currency0Symbol || 'Token0'} Exposure</span>
-            <span class="text-base font-semibold font-mono">~{formatTokenAmount(gridAmounts.totalAmount0, currency0Decimals)}</span>
-          </div>
-          <div class="flex flex-col gap-0.5">
-            <span class={statLabel}>{currency1Symbol || 'Token1'} Exposure</span>
-            <span class="text-base font-semibold font-mono">~{formatTokenAmount(gridAmounts.totalAmount1, currency1Decimals)}</span>
-          </div>
-        {/if}
-      </div>
-    </section>
-
-    <!-- Grid Orders Chart -->
-    {#if gridOrders.length > 0}
-      <section class={card}>
-        <GridOrdersChart
-          orders={gridOrders}
-          currentTick={effectiveTick}
-          centerTick={userState?.gridCenterTick ?? null}
-          token0Symbol={currency0Symbol}
-          token1Symbol={currency1Symbol}
-          token0Decimals={currency0Decimals}
-          token1Decimals={currency1Decimals}
-        />
-      </section>
-    {/if}
-
-    <!-- Planned Weights Chart -->
-    {#if plannedWeights.length > 0}
-      <section class={card}>
-        <WeightChart weights={plannedWeights} label="Active Weight Distribution" highlightCenter={true} />
-      </section>
-    {/if}
-
-    <!-- Grid Orders Table -->
-    {#if gridOrders.length > 0}
-      <section class={card}>
-        <h2 class="mb-4 text-[1.15rem] font-extrabold">Grid Orders ({gridOrders.length})</h2>
-        <div class="overflow-x-auto">
-          <table class="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">#</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Tick Lower</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Tick Upper</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">Liquidity</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">{currency0Symbol || 'Token0'}</th>
-                <th class="text-left text-[0.72rem] font-bold uppercase tracking-wider text-muted py-2 px-3 border-b border-line">{currency1Symbol || 'Token1'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each gridOrders as order, i}
-                {@const amounts = poolState ? orderAmounts(order, effectiveTick) : { amount0: 0n, amount1: 0n }}
-                <tr>
-                  <td class="py-2 px-3 border-b border-line">{i + 1}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono">{order.tickLower}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono">{order.tickUpper}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono">{order.liquidity.toString()}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono">~{formatTokenAmount(amounts.amount0, currency0Decimals)}</td>
-                  <td class="py-2 px-3 border-b border-line font-mono">~{formatTokenAmount(amounts.amount1, currency1Decimals)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    {/if}
-
-    <!-- Actions -->
-    <section class={card}>
-      <h2 class="mb-4 text-[1.15rem] font-extrabold">Actions</h2>
-      {#if advancedMode}
-        <label class="flex flex-col gap-1 mb-4 max-w-[220px]">
-          <span class={labelCls}>Deadline (min from now)</span>
-          <input class={inputCls} type="number" bind:value={deadlineMinutes} min="1" max="60" />
-        </label>
-      {/if}
-      <div class="flex flex-wrap gap-3">
-        <button class={btnPrimary} on:click={handleRebalance} disabled={pendingRebalance}>
-          {pendingRebalance ? 'Rebalancing\u2026' : 'Rebalance'}
-        </button>
-        <button class={btnOutline} on:click={() => fetchPoolData()}>
-          Refresh Data
-        </button>
-        <button class={btnDanger} on:click={handleCloseGrid} disabled={pendingClose}>
-          {pendingClose ? 'Closing\u2026' : 'Close Grid'}
-        </button>
-      </div>
-    </section>
-
-    <!-- Reconfigure (advanced mode) -->
-    {#if advancedMode && $connected}
-      <section class={card}>
-        <h2 class="mb-4 text-[1.15rem] font-extrabold">Reconfigure Grid</h2>
-        <p class="mb-4 text-muted text-[0.85rem]">Update your grid configuration, then rebalance to apply.</p>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4 mb-4">
-          <label class="flex flex-col gap-1">
-            <span class={labelCls}>Grid Spacing</span>
-            <input class={inputCls} type="number" bind:value={cfgGridSpacing} min="1" />
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class={labelCls}>Max Orders</span>
-            <input class={inputCls} type="number" bind:value={cfgMaxOrders} min="1" max="500" />
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class={labelCls}>Rebalance Threshold ({(cfgRebalanceBps / 100).toFixed(2)}%)</span>
-            <input class={inputCls} type="number" bind:value={cfgRebalanceBps} min="0" />
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class={labelCls}>Distribution Type</span>
-            <select class={inputCls} bind:value={cfgDistType}>
-              {#each DIST_LABELS as dl, i}
-                <option value={i}>{dl}</option>
-              {/each}
-            </select>
-          </label>
-          <label class="flex flex-row items-center gap-2 self-end pb-2">
-            <input class="w-[1.1rem] h-[1.1rem] accent-[var(--color-accent)]" type="checkbox" bind:checked={cfgAutoRebalance} />
-            <span class={labelCls}>Auto Rebalance</span>
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class={labelCls}>Max Slippage {currency0Symbol || 'Token 0'}</span>
-            <input class={inputCls} type="text" bind:value={cfgMaxSlippageDelta0} placeholder="0 = no limit" />
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class={labelCls}>Max Slippage {currency1Symbol || 'Token 1'}</span>
-            <input class={inputCls} type="text" bind:value={cfgMaxSlippageDelta1} placeholder="0 = no limit" />
-          </label>
-        </div>
-        <button class={btnPrimary} on:click={handleManualSetConfig} disabled={pendingSetConfig}>
-          {pendingSetConfig ? 'Sending\u2026' : 'Update Config'}
-        </button>
-      </section>
-    {/if}
-
-    <!-- Keeper (collapsible) -->
-    <section class={card}>
-      <button
-        class="flex items-center justify-between w-full text-left bg-transparent border-none cursor-pointer p-0"
-        on:click={() => (showKeeper = !showKeeper)}
-      >
-        <h2 class="text-[1.15rem] font-extrabold">Keeper Authorization</h2>
-        <span class="text-muted text-lg">{showKeeper ? '\u25BE' : '\u25B8'}</span>
-      </button>
-      {#if showKeeper}
-        <div class="mt-4">
-          <p class="mb-3 text-muted text-[0.85rem]">Authorize or revoke a keeper to rebalance on your behalf.</p>
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 mb-4">
-            <label class="flex flex-col gap-1">
-              <span class={labelCls}>Keeper Address</span>
-              <input class={inputCls} type="text" bind:value={keeperAddress} placeholder="0x\u2026" />
-            </label>
-            <label class="flex flex-row items-center gap-2 self-end pb-2">
-              <input class="w-[1.1rem] h-[1.1rem] accent-[var(--color-accent)]" type="checkbox" bind:checked={keeperAuthorized} />
-              <span class={labelCls}>Authorize</span>
-            </label>
-          </div>
-          <button class={btnOutline} on:click={handleSetKeeper} disabled={pendingKeeper || !keeperAddress}>
-            {pendingKeeper ? 'Sending\u2026' : keeperAuthorized ? 'Authorize Keeper' : 'Revoke Keeper'}
-          </button>
-        </div>
-      {/if}
-    </section>
   {/if}
 </div>
