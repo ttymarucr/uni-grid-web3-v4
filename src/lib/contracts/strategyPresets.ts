@@ -15,7 +15,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     label: 'Conservative',
     description: 'Wide grid, few orders, low rebalance frequency. Best for stable pairs or long-term holds.',
     icon: '🛡',
-    gridSpacing: 200,
+    gridSpacing: 240,
     maxOrders: 5,
     rebalanceThresholdBps: 400,
     distributionType: 0, // Flat
@@ -37,7 +37,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     label: 'Aggressive',
     description: 'Tight grid, many orders, concentrated liquidity. Maximizes fees in high-volume pools.',
     icon: '⚡',
-    gridSpacing: 10,
+    gridSpacing: 60,
     maxOrders: 30,
     rebalanceThresholdBps: 100,
     distributionType: 3, // Fibonacci

@@ -1,4 +1,4 @@
-import { readContract, writeContract, waitForTransactionReceipt } from '@wagmi/core';
+import { readContract, writeContract, waitForTransactionReceipt, getBalance } from '@wagmi/core';
 import { config } from '$lib/wagmi/client';
 import { PERMIT2_ADDRESS } from './config';
 import permit2Abi from './abi/Permit2.json';
@@ -95,4 +95,58 @@ export async function getPermit2Allowance(
     expiration: Number(r[1] ?? r.expiration),
     nonce: Number(r[2] ?? r.nonce),
   };
+}
+
+// ── Token balance ──
+
+const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
+
+const balanceOfAbi = [
+  {
+    type: 'function',
+    name: 'balanceOf',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+] as const;
+
+const erc20DecimalsAbi = [
+  {
+    type: 'function',
+    name: 'decimals',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+  },
+] as const;
+
+export async function getTokenBalance(token: Address, owner: Address): Promise<bigint> {
+  if (token === ZERO_ADDRESS) {
+    const result = await getBalance(cfg(), { address: owner });
+    return result.value;
+  }
+  const result = await readContract(cfg(), {
+    address: token,
+    abi: balanceOfAbi,
+    functionName: 'balanceOf',
+    args: [owner],
+  });
+  return BigInt(result as any);
+}
+
+export async function getTokenDecimals(token: Address): Promise<number | null> {
+  if (token === ZERO_ADDRESS) return 18;
+  try {
+    const result = await readContract(cfg(), {
+      address: token,
+      abi: erc20DecimalsAbi,
+      functionName: 'decimals',
+    });
+    const decimals = Number(result as any);
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) return null;
+    return decimals;
+  } catch {
+    return null;
+  }
 }

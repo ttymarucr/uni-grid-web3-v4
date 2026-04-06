@@ -25,6 +25,18 @@ export interface GridConfig {
   maxSlippageDelta1: bigint;
 }
 
+export function isGridConfigEqual(a: GridConfig, b: GridConfig): boolean {
+  return (
+    a.gridSpacing === b.gridSpacing &&
+    a.maxOrders === b.maxOrders &&
+    a.rebalanceThresholdBps === b.rebalanceThresholdBps &&
+    a.distributionType === b.distributionType &&
+    a.autoRebalance === b.autoRebalance &&
+    a.maxSlippageDelta0 === b.maxSlippageDelta0 &&
+    a.maxSlippageDelta1 === b.maxSlippageDelta1
+  );
+}
+
 export interface PoolState {
   initialized: boolean;
   currentTick: number;
@@ -164,6 +176,70 @@ export async function isRebalanceKeeper(hookAddress: Address, user: Address, kee
   return Boolean(result);
 }
 
+export async function getPoolManagerSlot0(
+  hookAddress: Address,
+  key: PoolKey,
+): Promise<{ sqrtPriceX96: bigint; tick: number; protocolFee: number; lpFee: number }> {
+  const result = await readContract(cfg(), {
+    address: hookAddress,
+    abi,
+    functionName: 'getPoolManagerSlot0',
+    args: [key],
+  });
+  const r = result as any;
+  return {
+    sqrtPriceX96: BigInt(r[0] ?? r.sqrtPriceX96),
+    tick: Number(r[1] ?? r.tick),
+    protocolFee: Number(r[2] ?? r.protocolFee),
+    lpFee: Number(r[3] ?? r.lpFee),
+  };
+}
+
+// ── PoolManager interaction ──
+
+const POOL_MANAGER_INITIALIZE_ABI = [
+  {
+    type: 'function',
+    name: 'initialize',
+    inputs: [
+      {
+        name: 'key',
+        type: 'tuple',
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' },
+        ],
+      },
+      { name: 'sqrtPriceX96', type: 'uint160' },
+    ],
+    outputs: [{ name: 'tick', type: 'int24' }],
+    stateMutability: 'nonpayable',
+  },
+] as const;
+
+export async function getPoolManagerAddress(hookAddress: Address): Promise<Address> {
+  const result = await readContract(cfg(), {
+    address: hookAddress,
+    abi,
+    functionName: 'poolManager',
+    args: [],
+  });
+  return result as Address;
+}
+
+export async function initializePool(poolManagerAddress: Address, key: PoolKey, sqrtPriceX96: bigint) {
+  const hash = await writeContract(cfg(), {
+    address: poolManagerAddress,
+    abi: POOL_MANAGER_INITIALIZE_ABI,
+    functionName: 'initialize',
+    args: [key, sqrtPriceX96],
+  });
+  return { hash, wait: () => waitForTransactionReceipt(cfg(), { hash }) };
+}
+
 // ── Write functions ──
 
 export async function setGridConfig(hookAddress: Address, key: PoolKey, gridConfig: GridConfig) {
@@ -176,12 +252,21 @@ export async function setGridConfig(hookAddress: Address, key: PoolKey, gridConf
   return { hash, wait: () => waitForTransactionReceipt(cfg(), { hash }) };
 }
 
-export async function deployGrid(hookAddress: Address, key: PoolKey, totalLiquidity: bigint, maxDelta0: bigint, maxDelta1: bigint, deadline: bigint) {
+export async function deployGrid(
+  hookAddress: Address,
+  key: PoolKey,
+  totalLiquidity: bigint,
+  maxDelta0: bigint,
+  maxDelta1: bigint,
+  deadline: bigint,
+  value: bigint = 0n,
+) {
   const hash = await writeContract(cfg(), {
     address: hookAddress,
     abi,
     functionName: 'deployGrid',
     args: [key, totalLiquidity, maxDelta0, maxDelta1, deadline],
+    value,
   });
   return { hash, wait: () => waitForTransactionReceipt(cfg(), { hash }) };
 }
