@@ -2,7 +2,7 @@
   import Icon from '@iconify/svelte';
   import { getChainIconId } from '$lib/icons/iconMap';
 
-  /** Numeric chain ID (1, 130, 42161, 8453, 56). */
+  /** Numeric chain ID (130 — Unichain). */
   export let chainId: number;
   /** Chain display name — used for fallback & aria-label. */
   export let name: string = '';

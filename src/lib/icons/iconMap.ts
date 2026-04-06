@@ -25,11 +25,7 @@ const TOKEN_ICON_MAP: Record<string, string> = {
 
 // ── Chain ID → Iconify icon ID ──
 const CHAIN_ICON_MAP: Record<number, string> = {
-  1:     'cryptocurrency-color:eth',   // Ethereum
   130:   'cryptocurrency-color:uni',   // Unichain
-  42161: 'cryptocurrency-color:eth',   // Arbitrum (no crypto-color entry)
-  8453:  'cryptocurrency-color:eth',   // Base (L2 of Ethereum)
-  56:    'cryptocurrency-color:bnb',   // BNB Chain
 };
 
 // ── Strategy label → Iconify icon ID (replaces emoji) ──

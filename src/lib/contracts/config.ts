@@ -10,25 +10,9 @@ export interface ChainDeployment {
 const ZERO: Address = '0x0000000000000000000000000000000000000000';
 
 export const deployments: Record<number, ChainDeployment> = {
-  1: {
-    address: (import.meta.env.VITE_GRIDHOOK_ADDRESS_ETHEREUM as Address) ?? ZERO,
-    explorerUrl: 'https://etherscan.io',
-  },
   130: {
     address: (import.meta.env.VITE_GRIDHOOK_ADDRESS_UNICHAIN as Address) ?? ZERO,
     explorerUrl: 'https://unichain.blockscout.com',
-  },
-  42161: {
-    address: (import.meta.env.VITE_GRIDHOOK_ADDRESS_ARBITRUM as Address) ?? ZERO,
-    explorerUrl: 'https://arbiscan.io',
-  },
-  8453: {
-    address: (import.meta.env.VITE_GRIDHOOK_ADDRESS_BASE as Address) ?? ZERO,
-    explorerUrl: 'https://basescan.org',
-  },
-  56: {
-    address: (import.meta.env.VITE_GRIDHOOK_ADDRESS_BNB as Address) ?? ZERO,
-    explorerUrl: 'https://bscscan.com',
   },
 };
 
@@ -61,11 +45,7 @@ export function addressUrl(chainId: number | null, addr: string): string {
 // ── SwapRouter addresses (set after deployment via env vars) ──
 
 const swapRouterAddresses: Record<number, Address> = {
-  1: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_ETHEREUM as Address) ?? ZERO,
   130: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_UNICHAIN as Address) ?? ZERO,
-  42161: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_ARBITRUM as Address) ?? ZERO,
-  8453: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_BASE as Address) ?? ZERO,
-  56: (import.meta.env.VITE_SWAP_ROUTER_ADDRESS_BNB as Address) ?? ZERO,
 };
 
 export function getSwapRouterAddress(chainId: number | null): Address {
