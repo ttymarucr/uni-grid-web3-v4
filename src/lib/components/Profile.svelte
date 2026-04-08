@@ -48,7 +48,7 @@
   const actionBtnPrimary = `${actionBtnBase} border-none bg-accent text-white hover:bg-accent-strong`;
   const actionBtnNeutral = `${actionBtnBase} border border-line bg-surface-strong text-text hover:border-accent hover:bg-glow`;
   const actionBtnDanger = `${actionBtnBase} border-none bg-red-600 text-white hover:bg-red-700`;
-  const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-6 shadow-card';
+  const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-4 sm:p-6 shadow-card';
   const labelCls = 'text-[0.78rem] font-bold text-muted uppercase tracking-wide';
   const statLabel = 'text-[0.72rem] font-bold text-muted uppercase tracking-wider';
 
@@ -494,7 +494,7 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {#each deployedPositions as pos}
           <button
-            class="text-left p-5 rounded-[var(--radius-card)] border border-line bg-surface shadow-card hover:border-accent transition-colors duration-150 cursor-pointer"
+            class="text-left p-4 sm:p-5 rounded-[var(--radius-card)] border border-line bg-surface shadow-card hover:border-accent transition-colors duration-150 cursor-pointer"
             on:click={() => openPosition(pos)}
           >
             <div class="flex items-center gap-1 mb-3">
@@ -528,8 +528,8 @@
                 <span class="text-sm font-semibold">{pos.gridConfig.autoRebalance ? 'On' : 'Off'}</span>
               </div>
               <div class="flex flex-col gap-0.5">
-                <span class={statLabel}>Rebalances</span>
-                <span class="text-sm font-semibold font-mono">{pos.userState.rebalanceCount}</span>
+                <span class={statLabel}>Swaps</span>
+                <span class="text-sm font-semibold font-mono">{pos.poolState.swapCount}</span>
               </div>
               {#if pos.apr != null}
                 <div class="flex flex-col gap-0.5">

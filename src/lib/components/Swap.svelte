@@ -4,7 +4,7 @@
 </script>
 
 <div class="max-w-[860px] mx-auto px-4 py-10">
-  <h1 class="text-2xl font-extrabold mb-1">Swap</h1>
+  <h1 class="text-xl sm:text-2xl font-extrabold mb-1">Swap</h1>
   <p class="text-sm text-muted mb-6">Swap tokens through hooked pools to generate fee revenue for grid positions.</p>
 
   {#if $connected}

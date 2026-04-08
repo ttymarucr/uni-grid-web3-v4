@@ -64,7 +64,7 @@
   const btnPrimary = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-accent text-white hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
   const btnOutline = 'cursor-pointer rounded-xl py-2.5 px-5 font-bold text-sm bg-transparent text-accent border border-accent hover:bg-glow disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
   const btnDanger = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
-  const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-6 shadow-card';
+  const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-4 sm:p-6 shadow-card';
   const labelCls = 'text-[0.78rem] font-bold text-muted uppercase tracking-wide';
   const statLabel = 'text-[0.72rem] font-bold text-muted uppercase tracking-wider';
 
@@ -826,7 +826,7 @@
         {@const active = wizardStep === num}
         {@const done = wizardStep > num}
         <button
-          class="flex flex-col items-center gap-1 px-4 py-1 bg-transparent border-none cursor-pointer disabled:cursor-default transition-opacity duration-150"
+          class="flex flex-col items-center gap-1 px-2 sm:px-4 py-1 bg-transparent border-none cursor-pointer disabled:cursor-default transition-opacity duration-150"
           class:opacity-40={!active && !done}
           disabled={!done}
           on:click={() => { if (done) wizardStep = num; }}
@@ -842,7 +842,7 @@
           >
             {done ? '\u2713' : num}
           </span>
-          <span class="text-[0.7rem] font-semibold" class:text-accent={active} class:text-muted={!active}>{stepLabel}</span>
+          <span class="hidden sm:inline text-[0.7rem] font-semibold" class:text-accent={active} class:text-muted={!active}>{stepLabel}</span>
         </button>
         {#if i < WIZARD_STEPS.length - 1}
           <div class="flex-1 h-px max-w-[3rem] transition-colors duration-150" class:bg-accent={done} class:bg-line={!done}></div>

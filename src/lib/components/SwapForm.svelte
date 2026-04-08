@@ -20,7 +20,7 @@
 
   const inputCls = 'w-full py-3 px-4 border border-line rounded-[10px] bg-surface-strong text-text text-lg focus:outline-2 focus:outline-accent focus:-outline-offset-1';
   const btnPrimary = 'w-full cursor-pointer border-none rounded-xl py-3 px-5 font-bold text-sm bg-accent text-white hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
-  const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-5 shadow-card';
+  const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-4 sm:p-5 shadow-card';
   const labelCls = 'text-[0.78rem] font-bold text-muted uppercase tracking-wide';
 
   // ── Reactive state ──

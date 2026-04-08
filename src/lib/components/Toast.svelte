@@ -5,7 +5,7 @@
 </script>
 
 {#if $toasts.length > 0}
-  <div class="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 max-w-[380px]" role="status" aria-live="polite">
+  <div class="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999] flex flex-col gap-2 max-w-[calc(100vw-2rem)] sm:max-w-[380px]" role="status" aria-live="polite">
     {#each $toasts as toast (toast.id)}
       <div class="toast flex items-start gap-2.5 py-3 px-4 rounded-[14px] bg-surface-strong border border-line shadow-card animate-slide-in
         {toast.type === 'pending' ? 'border-l-3 border-l-accent' : ''}
