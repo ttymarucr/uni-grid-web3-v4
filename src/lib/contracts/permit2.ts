@@ -150,3 +150,28 @@ export async function getTokenDecimals(token: Address): Promise<number | null> {
     return null;
   }
 }
+
+const erc20SymbolAbi = [
+  {
+    type: 'function',
+    name: 'symbol',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
+  },
+] as const;
+
+export async function getTokenSymbol(token: Address): Promise<string | null> {
+  if (token === ZERO_ADDRESS) return 'ETH';
+  try {
+    const result = await readContract(cfg(), {
+      address: token,
+      abi: erc20SymbolAbi,
+      functionName: 'symbol',
+    });
+    const sym = String(result);
+    return sym || null;
+  } catch {
+    return null;
+  }
+}

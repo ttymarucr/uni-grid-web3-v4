@@ -92,6 +92,7 @@
   let currency0DecimalsResolved = false;
   let currency1DecimalsResolved = false;
   const tokenDecimalsCache = new Map<string, number>();
+  const tokenSymbolCache = new Map<string, string>();
 
   $: presets = getPresetsForChain($chainIdStore ?? 0);
 
@@ -134,6 +135,7 @@
       currency0Decimals,
       currency1Decimals,
       tokenDecimalsCache,
+      tokenSymbolCache,
       addToast,
     });
     if (!result.ok) return false;
@@ -141,6 +143,8 @@
     currency1Decimals = result.currency1Decimals;
     currency0DecimalsResolved = result.currency0DecimalsResolved;
     currency1DecimalsResolved = result.currency1DecimalsResolved;
+    currency0Symbol = result.currency0Symbol;
+    currency1Symbol = result.currency1Symbol;
     return true;
   }
 

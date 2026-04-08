@@ -5,11 +5,13 @@ import {
   getPoolState,
   getUserState,
   getGridOrders,
+  getAccumulatedFees,
   type PoolKey,
   type GridConfig,
   type PoolState,
   type UserGridState,
 } from '$lib/contracts/gridHook';
+import { computeGridApr } from '$lib/stores/gridController';
 
 export interface DeployedPosition {
   preset: PoolPreset;
@@ -18,6 +20,7 @@ export interface DeployedPosition {
   gridConfig: GridConfig;
   orderCount: number;
   activeOrders: number;
+  apr: number | null;
 }
 
 export async function scanDeployedPositionsForUser(
@@ -40,11 +43,24 @@ export async function scanDeployedPositionsForUser(
         const us = await getUserState(hookAddress, key, user);
         if (!us.deployed) return;
 
-        const [ps, cfg, orders] = await Promise.all([
+        const [ps, cfg, orders, fees] = await Promise.all([
           getPoolState(hookAddress, key),
           getGridConfig(hookAddress, key, user),
           getGridOrders(hookAddress, key, user),
+          getAccumulatedFees(hookAddress, key, user),
         ]);
+
+        const totalFees0 = fees.reduce((s, f) => s + f.fees0, 0n);
+        const totalFees1 = fees.reduce((s, f) => s + f.fees1, 0n);
+        const aprResult = computeGridApr({
+          totalFees0,
+          totalFees1,
+          gridOrders: orders,
+          currentTick: ps.currentTick,
+          lastActionTimestamp: us.lastActionTimestamp,
+          currency0Decimals: preset.currency0Decimals,
+          currency1Decimals: preset.currency1Decimals,
+        });
 
         found.push({
           preset,
@@ -53,6 +69,7 @@ export async function scanDeployedPositionsForUser(
           gridConfig: cfg,
           orderCount: orders.length,
           activeOrders: orders.filter((o) => o.liquidity > 0n).length,
+          apr: aprResult?.apr ?? null,
         });
       } catch {
         // Skip pools that fail (not initialized, missing data, etc.)

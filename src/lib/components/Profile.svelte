@@ -16,6 +16,7 @@
   } from '$lib/contracts/gridHook';
   import { scanDeployedPositionsForUser, type DeployedPosition } from '$lib/contracts/gridData';
   import { runRebalance, runCloseGrid, runSetKeeper } from '$lib/contracts/gridProfileTx';
+  import { isNativeToken } from '$lib/contracts/poolPresets';
   import {
     tokenLabel,
   } from '$lib/contracts/gridUiShared';
@@ -26,6 +27,11 @@
     buildDesiredGridConfig as buildDesiredGridConfigShared,
     createChainResetState,
     fetchPoolDataAction,
+    estimateRebalanceDelta,
+    computeNativeRebalanceValue,
+    computeGridApr,
+    type RebalanceEstimate,
+    type GridAprResult,
   } from '$lib/stores/gridController';
   import WeightChart from './WeightChart.svelte';
   import GridOrdersChart from './GridOrdersChart.svelte';
@@ -250,6 +256,63 @@
   $: totalFees0 = orderFees.reduce((sum, f) => sum + f.fees0, 0n);
   $: totalFees1 = orderFees.reduce((sum, f) => sum + f.fees1, 0n);
 
+  // ── Rebalance cost estimate (pure math, no RPC calls) ──
+  $: rebalanceEstimate = (
+    userState?.deployed &&
+    gridOrders.length > 0 &&
+    gridConfig &&
+    plannedWeights.length > 0 &&
+    poolState
+  )
+    ? (() => {
+        try {
+          return estimateRebalanceDelta({
+            gridOrders,
+            gridConfig,
+            plannedWeights,
+            currentTick: effectiveTick,
+            oldCenter: userState!.gridCenterTick,
+            tickSpacing,
+          });
+        } catch {
+          return null;
+        }
+      })()
+    : null as RebalanceEstimate | null;
+
+  function formatSignedDelta(delta: bigint, decimals: number): string {
+    const abs = delta < 0n ? -delta : delta;
+    const formatted = formatTokenAmount(abs, decimals);
+    return delta > 0n ? `+${formatted}` : delta < 0n ? `\u2212${formatted}` : '0';
+  }
+
+  // ── APR calculation ──
+  $: aprData = (
+    userState?.deployed &&
+    gridOrders.length > 0 &&
+    poolState &&
+    userState.lastActionTimestamp > 0
+  )
+    ? computeGridApr({
+        totalFees0,
+        totalFees1,
+        gridOrders,
+        currentTick: effectiveTick,
+        lastActionTimestamp: userState.lastActionTimestamp,
+        currency0Decimals,
+        currency1Decimals,
+      })
+    : null as GridAprResult | null;
+
+  function formatElapsed(seconds: number): string {
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    const h = Math.floor(seconds / 3600);
+    if (h < 24) return `${h}h ${Math.floor((seconds % 3600) / 60)}m`;
+    const d = Math.floor(h / 24);
+    return `${d}d ${h % 24}h`;
+  }
+
   function orderAmounts(order: GridOrder, currentTick: number): { amount0: bigint; amount1: bigint } {
     if (order.liquidity === 0n) return { amount0: 0n, amount1: 0n };
     const sqrtPriceX96 = getSqrtPriceAtTick(currentTick);
@@ -273,16 +336,59 @@
   }
 
 
+  // ── Native currency helper ──
+  function isNativeCurrency(addr: string): boolean {
+    return isNativeToken(addr as Address);
+  }
+
   // ── Management actions ──
   let pendingRebalance = false;
+  let rebalanceStepLabel = '';
   let pendingClose = false;
 
   async function handleRebalance() {
     const user = $signerAddress as Address;
     if (!user) return;
     pendingRebalance = true;
-    await runRebalance(hookAddress, buildPoolKey(), user, deadlineMinutes);
-    pendingRebalance = false;
+    rebalanceStepLabel = '';
+    try {
+      // Compute native ETH value and approval tokens from the estimate
+      let nativeValue = 0n;
+      const approvalTokens: { addr: Address; label: string }[] = [];
+
+      if (rebalanceEstimate && rebalanceEstimate.thresholdMet) {
+        nativeValue = computeNativeRebalanceValue({
+          currency0,
+          currency1,
+          netDelta0: rebalanceEstimate.netDelta0,
+          netDelta1: rebalanceEstimate.netDelta1,
+          maxSlippageDelta0: gridConfig?.maxSlippageDelta0 ?? 0n,
+          maxSlippageDelta1: gridConfig?.maxSlippageDelta1 ?? 0n,
+          isNativeCurrency,
+        });
+
+        // Only request approvals for ERC20 tokens where user owes more
+        if (rebalanceEstimate.netDelta0 > 0n && !isNativeCurrency(currency0)) {
+          approvalTokens.push({ addr: currency0 as Address, label: tokenLabel(currency0Symbol, currency0) });
+        }
+        if (rebalanceEstimate.netDelta1 > 0n && !isNativeCurrency(currency1)) {
+          approvalTokens.push({ addr: currency1 as Address, label: tokenLabel(currency1Symbol, currency1) });
+        }
+      }
+
+      await runRebalance({
+        hookAddress,
+        poolKey: buildPoolKey(),
+        user,
+        deadlineMinutes,
+        nativeValue,
+        approvalTokens: approvalTokens.length > 0 ? approvalTokens : undefined,
+        onStep: (msg) => { rebalanceStepLabel = msg; },
+      });
+    } finally {
+      pendingRebalance = false;
+      rebalanceStepLabel = '';
+    }
     await fetchPoolData();
   }
 
@@ -421,6 +527,16 @@
                 <span class={statLabel}>Auto Rebalance</span>
                 <span class="text-sm font-semibold">{pos.gridConfig.autoRebalance ? 'On' : 'Off'}</span>
               </div>
+              <div class="flex flex-col gap-0.5">
+                <span class={statLabel}>Rebalances</span>
+                <span class="text-sm font-semibold font-mono">{pos.userState.rebalanceCount}</span>
+              </div>
+              {#if pos.apr != null}
+                <div class="flex flex-col gap-0.5">
+                  <span class={statLabel}>APR</span>
+                  <span class="text-sm font-extrabold font-mono text-green-400">{pos.apr.toFixed(2)}%</span>
+                </div>
+              {/if}
             </div>
             <div class="mt-3 pt-3 border-t border-line flex items-center justify-between">
               <span class="text-[0.72rem] text-muted">Fee: {(pos.preset.fee / 10000).toFixed(2)}%</span>
@@ -466,9 +582,9 @@
           <button
             class={actionBtnPrimary}
             on:click={handleRebalance}
-            disabled={pendingRebalance}
-            aria-label={pendingRebalance ? 'Rebalancing' : 'Rebalance grid'}
-            title={pendingRebalance ? 'Rebalancing' : 'Rebalance grid'}
+            disabled={pendingRebalance || (rebalanceEstimate != null && !rebalanceEstimate.thresholdMet)}
+            aria-label={pendingRebalance ? 'Rebalancing' : rebalanceEstimate && !rebalanceEstimate.thresholdMet ? 'Threshold not met' : 'Rebalance grid'}
+            title={pendingRebalance ? 'Rebalancing' : rebalanceEstimate && !rebalanceEstimate.thresholdMet ? 'Price hasn\u2019t moved enough to rebalance' : 'Rebalance grid'}
           >
             <span class:animate-spin={pendingRebalance}>
               <RefreshCw size={15} />
@@ -496,6 +612,9 @@
           </button>
         </div>
       </div>
+      {#if rebalanceStepLabel}
+        <p class="text-[0.8rem] text-accent mb-3 animate-pulse">{rebalanceStepLabel}</p>
+      {/if}
       <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
         {#if poolState}
           <div class="flex flex-col gap-0.5">
@@ -555,8 +674,66 @@
             <span class="text-base font-semibold font-mono text-green-400" title={formatRawTokenAmount(totalFees1, currency1Decimals)}>~{formatTokenAmount(totalFees1, currency1Decimals)}</span>
           </div>
         {/if}
+        {#if aprData}
+          <div class="flex flex-col gap-0.5">
+            <span class={statLabel}>APR</span>
+            <span class="text-base font-extrabold font-mono text-green-400">{aprData.apr.toFixed(2)}%</span>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <span class={statLabel}>Period</span>
+            <span class="text-base font-semibold text-muted">{formatElapsed(aprData.elapsedSeconds)} ago</span>
+          </div>
+        {/if}
+        {#if userState && userState.deployed}
+          <div class="flex flex-col gap-0.5">
+            <span class={statLabel}>Rebalances</span>
+            <span class="text-base font-semibold font-mono">{userState.rebalanceCount}</span>
+          </div>
+        {/if}
       </div>
     </section>
+
+    <!-- Rebalance Preview -->
+    {#if rebalanceEstimate}
+      <section class="{card} border-l-4 {rebalanceEstimate.thresholdMet ? 'border-l-accent' : 'border-l-yellow-500'}">
+        <h2 class="text-[1rem] font-extrabold mb-3">Rebalance Preview</h2>
+        {#if !rebalanceEstimate.thresholdMet}
+          <p class="text-[0.82rem] text-yellow-400 mb-2">
+            Price hasn't moved enough to trigger a rebalance. The grid center would remain near tick {rebalanceEstimate.oldCenter}
+            (current aligned tick: {rebalanceEstimate.newCenter}).
+          </p>
+        {:else}
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3 text-[0.85rem]">
+            <div class="flex flex-col gap-0.5">
+              <span class={statLabel}>Center Tick Shift</span>
+              <span class="font-semibold font-mono">{rebalanceEstimate.oldCenter} &rarr; {rebalanceEstimate.newCenter}</span>
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <span class={statLabel}>{currency0Symbol || 'Token0'} Net</span>
+              <span class="font-semibold font-mono {rebalanceEstimate.netDelta0 > 0n ? 'text-red-400' : rebalanceEstimate.netDelta0 < 0n ? 'text-green-400' : 'text-text'}">
+                {formatSignedDelta(rebalanceEstimate.netDelta0, currency0Decimals)}
+              </span>
+              {#if rebalanceEstimate.netDelta0 > 0n}
+                <span class="text-[0.7rem] text-muted">additional needed</span>
+              {:else if rebalanceEstimate.netDelta0 < 0n}
+                <span class="text-[0.7rem] text-muted">returned to you</span>
+              {/if}
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <span class={statLabel}>{currency1Symbol || 'Token1'} Net</span>
+              <span class="font-semibold font-mono {rebalanceEstimate.netDelta1 > 0n ? 'text-red-400' : rebalanceEstimate.netDelta1 < 0n ? 'text-green-400' : 'text-text'}">
+                {formatSignedDelta(rebalanceEstimate.netDelta1, currency1Decimals)}
+              </span>
+              {#if rebalanceEstimate.netDelta1 > 0n}
+                <span class="text-[0.7rem] text-muted">additional needed</span>
+              {:else if rebalanceEstimate.netDelta1 < 0n}
+                <span class="text-[0.7rem] text-muted">returned to you</span>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      </section>
+    {/if}
 
     <!-- Grid Orders Chart -->
     {#if gridOrders.length > 0}

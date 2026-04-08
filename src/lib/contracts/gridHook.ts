@@ -46,6 +46,8 @@ export interface PoolState {
 export interface UserGridState {
   deployed: boolean;
   gridCenterTick: number;
+  lastActionTimestamp: number;
+  rebalanceCount: number;
 }
 
 export interface GridOrder {
@@ -126,6 +128,8 @@ export async function getUserState(hookAddress: Address, key: PoolKey, user: Add
   return {
     deployed: Boolean(r.deployed),
     gridCenterTick: Number(r.gridCenterTick),
+    lastActionTimestamp: Number(r.lastActionTimestamp),
+    rebalanceCount: Number(r.rebalanceCount),
   };
 }
 
@@ -288,7 +292,7 @@ export function previewWeights(gridLength: number, distributionType: number): bi
   return weights;
 }
 
-function alignTick(tick: number, tickSpacing: number): number {
+export function alignTick(tick: number, tickSpacing: number): number {
   let compressed = Math.trunc(tick / tickSpacing);
   if (tick < 0 && tick % tickSpacing !== 0) compressed--;
   return compressed * tickSpacing;
@@ -432,12 +436,13 @@ export async function deployGrid(
   return { hash, wait: () => waitForTransactionReceipt(cfg(), { hash }) };
 }
 
-export async function rebalance(hookAddress: Address, key: PoolKey, user: Address, deadline: bigint) {
+export async function rebalance(hookAddress: Address, key: PoolKey, user: Address, deadline: bigint, value: bigint = 0n) {
   const hash = await writeContract(cfg(), {
     address: hookAddress,
     abi,
     functionName: 'rebalance',
     args: [key, user, deadline],
+    value,
   });
   return { hash, wait: () => waitForTransactionReceipt(cfg(), { hash }) };
 }

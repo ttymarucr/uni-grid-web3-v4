@@ -2,8 +2,9 @@ import { writable } from 'svelte/store';
 import { parseTokenAmount } from '$lib/contracts/tickMath';
 import { resolveTickSpacingFromFee, hasValidTokenDecimals } from '$lib/contracts/gridUiShared';
 import { tokenLabel } from '$lib/contracts/gridUiShared';
-import { getTokenBalance, getTokenDecimals } from '$lib/contracts/permit2';
+import { getTokenBalance, getTokenDecimals, getTokenSymbol } from '$lib/contracts/permit2';
 import {
+  alignTick,
   computeGridOrders,
   getAccumulatedFees,
   getGridConfig,
@@ -14,7 +15,7 @@ import {
   getUserState,
   previewWeights,
 } from '$lib/contracts/gridHook';
-import { formatTokenAmount, getTokenAmountsForOrders } from '$lib/contracts/tickMath';
+import { formatTokenAmount, getTokenAmountsForOrders, tickToPrice } from '$lib/contracts/tickMath';
 import type { Address } from 'viem';
 import type { GridConfig, GridOrder, OrderFees, PoolKey, PoolState, UserGridState } from '$lib/contracts/gridHook';
 
@@ -192,6 +193,7 @@ export interface ResolveTokenDecimalsParams {
   currency0Decimals: number;
   currency1Decimals: number;
   tokenDecimalsCache: Map<string, number>;
+  tokenSymbolCache: Map<string, string>;
   addToast: (level: 'error' | 'info' | 'success', message: string) => void;
 }
 
@@ -201,6 +203,8 @@ export interface ResolveTokenDecimalsResult {
   currency1Decimals: number;
   currency0DecimalsResolved: boolean;
   currency1DecimalsResolved: boolean;
+  currency0Symbol: string;
+  currency1Symbol: string;
 }
 
 export async function resolveTokenDecimalsForSelectionAction(
@@ -250,8 +254,28 @@ export async function resolveTokenDecimalsForSelectionAction(
       currency1Decimals: params.currency1Decimals,
       currency0DecimalsResolved: false,
       currency1DecimalsResolved: false,
+      currency0Symbol: params.currency0Symbol,
+      currency1Symbol: params.currency1Symbol,
     };
   }
+
+  const resolveSymbol = async (address: string, current: string): Promise<string> => {
+    if (current) return current;
+    const cacheKey = `${params.chainId}:${address.toLowerCase()}`;
+    const cached = params.tokenSymbolCache.get(cacheKey);
+    if (cached) return cached;
+    const sym = await getTokenSymbol(address as Address);
+    if (sym) {
+      params.tokenSymbolCache.set(cacheKey, sym);
+      return sym;
+    }
+    return tokenLabel('', address);
+  };
+
+  const [sym0, sym1] = await Promise.all([
+    resolveSymbol(params.currency0, params.currency0Symbol),
+    resolveSymbol(params.currency1, params.currency1Symbol),
+  ]);
 
   return {
     ok: true,
@@ -259,6 +283,8 @@ export async function resolveTokenDecimalsForSelectionAction(
     currency1Decimals: t1.decimals,
     currency0DecimalsResolved: t0.resolved,
     currency1DecimalsResolved: t1.resolved,
+    currency0Symbol: sym0,
+    currency1Symbol: sym1,
   };
 }
 
@@ -428,6 +454,77 @@ export function computeGridOrdersPreviewAction(params: {
   );
 }
 
+export interface RebalanceEstimate {
+  netDelta0: bigint;
+  netDelta1: bigint;
+  newCenter: number;
+  oldCenter: number;
+  thresholdMet: boolean;
+  newOrders: GridOrder[];
+}
+
+export function estimateRebalanceDelta(params: {
+  gridOrders: GridOrder[];
+  gridConfig: GridConfig;
+  plannedWeights: bigint[];
+  currentTick: number;
+  oldCenter: number;
+  tickSpacing: number;
+}): RebalanceEstimate {
+  const { gridOrders, gridConfig, plannedWeights, currentTick, oldCenter, tickSpacing } = params;
+
+  const totalLiquidity = gridOrders.reduce((sum, o) => sum + o.liquidity, 0n);
+  const currentAmounts = getTokenAmountsForOrders(gridOrders, currentTick);
+
+  const newCenter = alignTick(currentTick, tickSpacing);
+
+  // Check threshold (mirrors contract logic)
+  const tickDelta = Math.abs(newCenter - oldCenter);
+  const minTickDelta = Math.trunc(
+    (gridConfig.gridSpacing * gridConfig.rebalanceThresholdBps) / 10_000,
+  );
+  const thresholdMet = minTickDelta === 0 || tickDelta >= minTickDelta;
+
+  const newOrders = computeGridOrders(
+    newCenter,
+    gridConfig.gridSpacing,
+    tickSpacing,
+    gridConfig.maxOrders,
+    plannedWeights,
+    totalLiquidity,
+  );
+  const newAmounts = getTokenAmountsForOrders(newOrders, currentTick);
+
+  return {
+    netDelta0: newAmounts.totalAmount0 - currentAmounts.totalAmount0,
+    netDelta1: newAmounts.totalAmount1 - currentAmounts.totalAmount1,
+    newCenter,
+    oldCenter,
+    thresholdMet,
+    newOrders,
+  };
+}
+
+export function computeNativeRebalanceValue(params: {
+  currency0: string;
+  currency1: string;
+  netDelta0: bigint;
+  netDelta1: bigint;
+  maxSlippageDelta0: bigint;
+  maxSlippageDelta1: bigint;
+  isNativeCurrency: (address: string) => boolean;
+}): bigint {
+  let value = 0n;
+  // Only attach value for native currencies where the user owes the pool (positive net delta)
+  if (params.isNativeCurrency(params.currency0) && params.netDelta0 > 0n) {
+    value += params.netDelta0 + params.maxSlippageDelta0;
+  }
+  if (params.isNativeCurrency(params.currency1) && params.netDelta1 > 0n) {
+    value += params.netDelta1 + params.maxSlippageDelta1;
+  }
+  return value;
+}
+
 export function computeLiquidityFromAmount0(params: {
   raw0: bigint;
   refAmount0: bigint;
@@ -468,4 +565,44 @@ export function computeLiquidityFromAmount1(params: {
     };
   }
   return { deployLiquidity: liq.toString(), derivedAmount0Text: '0' };
+}
+
+export interface GridAprResult {
+  apr: number;
+  elapsedSeconds: number;
+}
+
+export function computeGridApr(params: {
+  totalFees0: bigint;
+  totalFees1: bigint;
+  gridOrders: GridOrder[];
+  currentTick: number;
+  lastActionTimestamp: number;
+  currency0Decimals: number;
+  currency1Decimals: number;
+}): GridAprResult | null {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const elapsed = nowSec - params.lastActionTimestamp;
+  if (params.lastActionTimestamp <= 0 || elapsed < 60) return null;
+
+  const amounts = getTokenAmountsForOrders(params.gridOrders, params.currentTick);
+  if (amounts.totalAmount0 === 0n && amounts.totalAmount1 === 0n) return null;
+
+  const price = tickToPrice(params.currentTick);
+  const d0 = params.currency0Decimals;
+  const d1 = params.currency1Decimals;
+
+  const toFloat0 = (v: bigint) => Number(v) / 10 ** d0;
+  const toFloat1 = (v: bigint) => Number(v) / 10 ** d1;
+
+  const capitalInToken1 = toFloat0(amounts.totalAmount0) * price + toFloat1(amounts.totalAmount1);
+  if (capitalInToken1 <= 0) return null;
+
+  const feesInToken1 = toFloat0(params.totalFees0) * price + toFloat1(params.totalFees1);
+  if (feesInToken1 <= 0) return null;
+
+  const SECONDS_PER_YEAR = 365 * 86400;
+  const apr = (feesInToken1 / capitalInToken1) * (SECONDS_PER_YEAR / elapsed) * 100;
+
+  return { apr, elapsedSeconds: elapsed };
 }
