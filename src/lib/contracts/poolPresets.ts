@@ -87,7 +87,7 @@ export const POOL_PRESETS: Record<number, PoolPreset[]> = {
     {
       label: 'ETH / UNI',
       currency0: ZERO,
-      currency1: '0x8f187aa05619a017077f5308904739877ce9eA21',
+      currency1: '0x8f187aA05619a017077f5308904739877ce9eA21',
       currency0Symbol: 'ETH',
       currency1Symbol: 'UNI',
       currency0Decimals: 18,
@@ -98,7 +98,7 @@ export const POOL_PRESETS: Record<number, PoolPreset[]> = {
     {
       label: 'USDC / UNI',
       currency0: '0x078D782b760474a361dDA0AF3839290b0EF57AD6',
-      currency1: '0x8f187aa05619a017077f5308904739877ce9eA21',
+      currency1: '0x8f187aA05619a017077f5308904739877ce9eA21',
       currency0Symbol: 'USDC',
       currency1Symbol: 'UNI',
       currency0Decimals: 6,

@@ -698,7 +698,7 @@
       <section class="{card} border-l-4 {rebalanceEstimate.thresholdMet ? 'border-l-accent' : 'border-l-yellow-500'}">
         <h2 class="text-[1rem] font-extrabold mb-3">Rebalance Preview</h2>
         {#if !rebalanceEstimate.thresholdMet}
-          <p class="text-[0.82rem] text-yellow-400 mb-2">
+          <p class="text-[0.82rem] text-muted mb-2">
             Price hasn't moved enough to trigger a rebalance. The grid center would remain near tick {rebalanceEstimate.oldCenter}
             (current aligned tick: {rebalanceEstimate.newCenter}).
           </p>

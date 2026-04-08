@@ -96,6 +96,18 @@
 
   $: presets = getPresetsForChain($chainIdStore ?? 0);
 
+  // Clear preset selection when user edits currency addresses away from preset values
+  $: if (selectedPresetIdx >= 0 && presets[selectedPresetIdx]) {
+    const p = presets[selectedPresetIdx];
+    if (currency0.toLowerCase() !== p.currency0.toLowerCase() || currency1.toLowerCase() !== p.currency1.toLowerCase()) {
+      selectedPresetIdx = -1;
+      currency0DecimalsResolved = false;
+      currency1DecimalsResolved = false;
+      currency0Symbol = '';
+      currency1Symbol = '';
+    }
+  }
+
   function selectPreset(idx: number) {
     selectedPresetIdx = idx;
     const p = presets[idx];
@@ -1182,7 +1194,7 @@
             />
           </div>
           {#if zeroOrderCount > 0}
-            <div class="mt-3 flex items-start gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-[0.85rem] text-yellow-200">
+            <div class="mt-3 flex items-start gap-2 rounded-lg border border-yellow-500 bg-yellow-400 px-4 py-3 text-[0.85rem] text-black font-semibold">
               <span class="mt-0.5 text-yellow-400">&#9888;</span>
               <span>
                 <strong>{zeroOrderCount}</strong> of {previewedOrders.length} orders will be empty due to rounding
@@ -1266,7 +1278,7 @@
             </div>
           {/if}
           {#if hasAmountMismatchWarning}
-            <div class="mt-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-[0.8rem] text-yellow-200">
+            <div class="mt-3 rounded-lg border border-yellow-500 bg-yellow-400 px-3 py-2 text-[0.8rem] text-black font-semibold">
               Amount mismatch detected (&gt; 1%):
               {#if mismatch0Bps > AMOUNT_MISMATCH_WARN_BPS}
                 {currency0Symbol || 'Token0'} {Number(mismatch0Bps) / 100}%
