@@ -8,7 +8,7 @@
 
 <footer class="border-t border-line py-6 px-4 mt-auto">
   <div class="max-w-[1080px] mx-auto flex justify-between items-center text-[0.8rem]">
-    <span class="text-muted">Uni Grid v4</span>
+    <span class="text-muted">inGrid v4</span>
     {#if hookAddress !== '0x0000000000000000000000000000000000000000'}
       <a class="font-mono text-[0.78rem] text-accent no-underline hover:underline" href={explorerLink} target="_blank" rel="noreferrer">
         Contract: {hookAddress.slice(0, 6)}…{hookAddress.slice(-4)}

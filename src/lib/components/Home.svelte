@@ -1,11 +1,12 @@
 <script lang="ts">
   import { connected } from '$lib/stores/wallet';
   import { link } from 'svelte-spa-router';
+  const baseUrl = import.meta.env.BASE_URL;
 </script>
 
 {#if $connected}
   <div class="max-w-[860px] mx-auto px-4 py-14">
-    <h1 class="text-2xl sm:text-3xl font-extrabold mb-2">Uni Grid</h1>
+    <h1 class="text-2xl sm:text-3xl font-extrabold mb-2">inGrid</h1>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <a
         href="/wizard"
@@ -35,7 +36,7 @@
   </div>
 {:else}
   <div class="text-center py-24 px-4">
-    <p class="text-3xl text-accent mb-4">◈</p>
+    <p class="w-24 h-24 mx-auto"><img src="{baseUrl}logo.svg" alt="inGrid Logo" /></p>
     <h2 class="mb-2 text-2xl font-bold">Connect your wallet</h2>
     <p class="text-muted m-0">Connect a wallet to access the Wizard and Profile pages.</p>
   </div>

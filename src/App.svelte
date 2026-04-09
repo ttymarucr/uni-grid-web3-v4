@@ -16,8 +16,8 @@
 </script>
 
 <svelte:head>
-    <title>Uni Grid</title>
-    <meta name="description" content="Uni Grid — Manage grid liquidity positions across multiple chains.">
+    <title>inGrid</title>
+    <meta name="description" content="inGrid — Manage grid liquidity positions across multiple chains.">
 </svelte:head>
 
 <div class="flex flex-col min-h-screen">

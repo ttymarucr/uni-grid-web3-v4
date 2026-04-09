@@ -1,4 +1,4 @@
-# Uniswap V4 Grid Hook — Web Interface
+# inGrid: Uniswap V4 Grid Hook — Web Interface
 
 ## Overview
 
