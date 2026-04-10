@@ -34,6 +34,7 @@
     parseBpsInput,
   } from '$lib/contracts/gridUiShared';
   import { getPresetsForChain, isNativeToken } from '$lib/contracts/poolPresets';
+  import { savePosition } from '$lib/contracts/customPositions';
   import { getTokenAmountsForOrders, formatTokenAmount, parseTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, tickToPrice } from '$lib/contracts/tickMath';
   import { STRATEGY_PRESETS, DIST_LABELS, DIST_DESCRIPTIONS } from '$lib/contracts/strategyPresets';
   import Icon from '@iconify/svelte';
@@ -185,6 +186,22 @@
 
   function isNativeCurrency(addr: string): boolean {
     return isNativeToken(addr as Address);
+  }
+
+  function savePositionIfCustom() {
+    if (selectedPresetIdx >= 0) return; // already a known preset
+    const user = $signerAddress;
+    if (!user || !currency0 || !currency1) return;
+    savePosition($chainIdStore ?? 0, user, {
+      currency0: currency0 as Address,
+      currency1: currency1 as Address,
+      currency0Symbol,
+      currency1Symbol,
+      currency0Decimals,
+      currency1Decimals,
+      fee,
+      tickSpacing,
+    });
   }
 
   function buildPoolKey(): PoolKey {
@@ -492,6 +509,7 @@
     const ok = await fetchPoolData();
     if (!ok) return;
     if (userState?.deployed) {
+      savePositionIfCustom();
       push('/profile');
     } else {
       wizardStep = 2;
@@ -714,6 +732,7 @@
       );
 
       addToast('success', 'Grid deployed successfully!');
+      savePositionIfCustom();
       await fetchPoolData();
       push('/profile');
     } catch (e: any) {

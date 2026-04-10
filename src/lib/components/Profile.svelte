@@ -17,10 +17,11 @@
   import { scanDeployedPositionsForUser, type DeployedPosition } from '$lib/contracts/gridData';
   import { runRebalance, runCloseGrid, runSetKeeper } from '$lib/contracts/gridProfileTx';
   import { isNativeToken } from '$lib/contracts/poolPresets';
+  import { getStoredPositions } from '$lib/contracts/customPositions';
   import {
     tokenLabel,
   } from '$lib/contracts/gridUiShared';
-  import { getTokenAmountsForOrders, formatTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, formatRawTokenAmount } from '$lib/contracts/tickMath';
+  import { getTokenAmountsForOrders, formatTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, formatRawTokenAmount, tickToPrice } from '$lib/contracts/tickMath';
   import { DIST_LABELS } from '$lib/contracts/strategyPresets';
   import {
     buildPoolKey as buildPoolKeyShared,
@@ -55,6 +56,7 @@
   // ── State machine ──
   let view: 'positions' | 'manage' = 'positions';
   let advancedMode = false;
+  let sortBy: 'default' | 'apr' | 'liquidity' = 'default';
 
   import { push, link } from 'svelte-spa-router';
 
@@ -67,7 +69,9 @@
     const user = $signerAddress as Address;
     if (!user || !hookAddress) return;
     scanningPositions = true;
-    deployedPositions = await scanDeployedPositionsForUser(hookAddress, user, $chainIdStore ?? 0);
+    const chainId = $chainIdStore ?? 0;
+    const stored = getStoredPositions(chainId, user);
+    deployedPositions = await scanDeployedPositionsForUser(hookAddress, user, chainId, stored);
     scanningPositions = false;
     hasScanned = true;
   }
@@ -247,6 +251,17 @@
     view = 'positions';
   }
 
+  // ── Position sorting ──
+  $: sortedPositions = [...deployedPositions].sort((a, b) => {
+    if (sortBy === 'apr') return (b.apr ?? -1) - (a.apr ?? -1);
+    if (sortBy === 'liquidity') {
+      if (a.totalLiquidity > b.totalLiquidity) return -1;
+      if (a.totalLiquidity < b.totalLiquidity) return 1;
+      return 0;
+    }
+    return b.poolState.swapCount - a.poolState.swapCount;
+  });
+
   // ── Estimated token amounts for on-chain grid orders ──
   $: gridAmounts = (gridOrders.length > 0 && poolState)
     ? getTokenAmountsForOrders(gridOrders, effectiveTick)
@@ -335,6 +350,20 @@
     });
   }
 
+
+  // ── Total value in token0 for position cards ──
+  function totalValueInToken0(pos: DeployedPosition): string {
+    const rawPrice = tickToPrice(pos.poolState.currentTick);
+    const dec0 = pos.preset.currency0Decimals;
+    const dec1 = pos.preset.currency1Decimals;
+    const amt0 = Number(pos.totalAmount0) / 10 ** dec0;
+    const amt1 = Number(pos.totalAmount1) / 10 ** dec1;
+    // tickToPrice returns raw price (token1_raw / token0_raw); adjust for decimals
+    const humanPrice = rawPrice * (10 ** dec0) / (10 ** dec1);
+    const amt1InToken0 = humanPrice > 0 ? amt1 / humanPrice : 0;
+    const total = amt0 + amt1InToken0;
+    return total < 0.01 ? total.toExponential(2) : total.toFixed(total < 1 ? 4 : 2);
+  }
 
   // ── Native currency helper ──
   function isNativeCurrency(addr: string): boolean {
@@ -480,9 +509,28 @@
 
     <div class="flex items-center justify-between flex-wrap gap-2">
       <h2 class="text-[1.3rem] font-extrabold">Your Grids</h2>
-      <button class={btnPrimary} on:click={startNewGrid}>
-        <span class="inline-flex items-center gap-1.5">&#x1FA84; Deploy a new Grid</span>
-      </button>
+      <div class="flex items-center gap-2 flex-wrap">
+        {#if deployedPositions.length > 1}
+          <div class="flex items-center gap-1 text-[0.72rem] font-bold text-muted uppercase tracking-wider">
+            <span>Sort:</span>
+            <button
+              class="px-2 py-0.5 rounded-md border transition-colors duration-150 {sortBy === 'default' ? 'border-accent text-accent bg-glow' : 'border-line text-muted hover:border-accent'}"
+              on:click={() => sortBy = 'default'}
+            >Default</button>
+            <button
+              class="px-2 py-0.5 rounded-md border transition-colors duration-150 {sortBy === 'apr' ? 'border-accent text-accent bg-glow' : 'border-line text-muted hover:border-accent'}"
+              on:click={() => sortBy = 'apr'}
+            >APR</button>
+            <button
+              class="px-2 py-0.5 rounded-md border transition-colors duration-150 {sortBy === 'liquidity' ? 'border-accent text-accent bg-glow' : 'border-line text-muted hover:border-accent'}"
+              on:click={() => sortBy = 'liquidity'}
+            >Liquidity</button>
+          </div>
+        {/if}
+        <button class={btnPrimary} on:click={startNewGrid}>
+          <span class="inline-flex items-center gap-1.5">&#x1FA84; Deploy a new Grid</span>
+        </button>
+      </div>
     </div>
 
     {#if scanningPositions}
@@ -492,15 +540,20 @@
       </div>
     {:else}
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {#each deployedPositions as pos}
+        {#each sortedPositions as pos}
           <button
             class="text-left p-4 sm:p-5 rounded-[var(--radius-card)] border border-line bg-surface shadow-card hover:border-accent transition-colors duration-150 cursor-pointer"
             on:click={() => openPosition(pos)}
           >
-            <div class="flex items-center gap-1 mb-3">
+            <div class="flex justify-between items-center mb-3">
+              <div class="flex items-center gap-1">
               <TokenIcon symbol={pos.preset.currency0Symbol} size={20} />
               <TokenIcon symbol={pos.preset.currency1Symbol} size={20} />
               <span class="font-extrabold text-text text-[1.05rem]">{pos.preset.label}</span>
+              </div>
+              {#if pos.totalAmount0 > 0n || pos.totalAmount1 > 0n}
+                <span class="text-sm font-semibold font-mono">~{totalValueInToken0(pos)}({pos.preset.currency0Symbol})</span>
+              {/if}
             </div>
             <div class="grid grid-cols-2 gap-x-4 gap-y-2">
               <div class="flex flex-col gap-0.5">

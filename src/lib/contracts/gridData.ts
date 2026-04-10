@@ -12,6 +12,7 @@ import {
   type UserGridState,
 } from '$lib/contracts/gridHook';
 import { computeGridApr } from '$lib/stores/gridController';
+import { getTokenAmountsForOrders } from '$lib/contracts/tickMath';
 
 export interface DeployedPosition {
   preset: PoolPreset;
@@ -20,16 +21,30 @@ export interface DeployedPosition {
   gridConfig: GridConfig;
   orderCount: number;
   activeOrders: number;
+  totalLiquidity: bigint;
+  totalAmount0: bigint;
+  totalAmount1: bigint;
   apr: number | null;
+}
+
+function deduplicatePresets(presets: PoolPreset[]): PoolPreset[] {
+  const seen = new Set<string>();
+  return presets.filter((p) => {
+    const key = `${p.currency0.toLowerCase()}:${p.currency1.toLowerCase()}:${p.fee}:${p.tickSpacing}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function scanDeployedPositionsForUser(
   hookAddress: Address,
   user: Address,
   chainId: number,
+  extraPresets: PoolPreset[] = [],
 ): Promise<DeployedPosition[]> {
   const found: DeployedPosition[] = [];
-  const chainPresets = getPresetsForChain(chainId);
+  const chainPresets = deduplicatePresets([...getPresetsForChain(chainId), ...extraPresets]);
   await Promise.all(
     chainPresets.map(async (preset) => {
       try {
@@ -62,6 +77,8 @@ export async function scanDeployedPositionsForUser(
           currency1Decimals: preset.currency1Decimals,
         });
 
+        const { totalAmount0, totalAmount1 } = getTokenAmountsForOrders(orders, ps.currentTick);
+
         found.push({
           preset,
           poolState: ps,
@@ -69,6 +86,9 @@ export async function scanDeployedPositionsForUser(
           gridConfig: cfg,
           orderCount: orders.length,
           activeOrders: orders.filter((o) => o.liquidity > 0n).length,
+          totalLiquidity: orders.reduce((s, o) => s + o.liquidity, 0n),
+          totalAmount0,
+          totalAmount1,
           apr: aprResult?.apr ?? null,
         });
       } catch {
