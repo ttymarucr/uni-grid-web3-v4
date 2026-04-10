@@ -1,6 +1,22 @@
 import type { waitForTransactionReceipt } from '@wagmi/core';
+import { getConnection, switchChain } from '@wagmi/core';
+import { config } from '$lib/wagmi/client';
+import { supportedChains } from '$lib/wagmi/config';
 import { addToast, updateToast } from '$lib/stores/toasts';
 import type { Hash } from 'viem';
+
+const DEFAULT_CHAIN_ID = supportedChains[0].id;
+
+/**
+ * Ensures the wallet is on the expected chain; prompts a switch if not.
+ * Defaults to the first supported chain when no chainId is provided.
+ */
+export async function ensureChain(expectedChainId: number = DEFAULT_CHAIN_ID): Promise<void> {
+  const connection = getConnection(config)
+  const current = connection?.chainId;
+  if (current === expectedChainId) return;
+  await switchChain(config, { chainId: expectedChainId });
+}
 
 export interface TxResult {
   hash: Hash;
@@ -15,6 +31,7 @@ export async function executeTransaction(
   label: string,
   writeFn: () => Promise<TxResult>
 ): Promise<void> {
+  await ensureChain();
   const toastId = addToast('pending', `${label}: sending transaction…`);
 
   try {
@@ -45,6 +62,7 @@ export async function executeTransaction(
       type: 'error',
       message: `${label}: ${msg}`,
     });
+    throw err;
   }
 }
 

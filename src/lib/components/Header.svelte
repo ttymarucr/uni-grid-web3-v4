@@ -4,6 +4,7 @@
   import { config } from '$lib/wagmi/client';
   import { connect, switchChain } from '@wagmi/core';
   import { injected } from '@wagmi/connectors';
+  import { ensureChain } from '$lib/contracts/txWrapper';
   import ChainIcon from './ChainIcon.svelte';
   import { link } from 'svelte-spa-router';
 
@@ -16,6 +17,7 @@
     connecting = true;
     try {
       await connect(config, { connector: injected() });
+      await ensureChain();
     } catch {
       // user rejected or other error
     } finally {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { connected, signerAddress, chainId as chainIdStore } from '$lib/stores/wallet';
   import { getGridHookAddress, getSwapRouterAddress } from '$lib/contracts/config';
-  import { executeTransaction } from '$lib/contracts/txWrapper';
+  import { executeTransaction, ensureChain } from '$lib/contracts/txWrapper';
   import { addToast } from '$lib/stores/toasts';
   import { getPoolManagerSlot0, getDeadline, type PoolKey } from '$lib/contracts/gridHook';
   import {
@@ -178,6 +178,7 @@
     const amountSpecified = -parsedAmountIn;
 
     try {
+      await ensureChain();
       // Step 1: Approve token for Permit2 (if ERC-20)
       if (!isInputNative) {
         const allowance = await getTokenAllowanceForPermit2(inputToken!, user);

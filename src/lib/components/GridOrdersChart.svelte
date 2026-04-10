@@ -2,7 +2,7 @@
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip } from 'chart.js';
   import type { Plugin } from 'chart.js';
-  import { tickToPrice, getAmountsForLiquidity, getSqrtPriceAtTick, formatTokenAmount } from '$lib/contracts/tickMath';
+  import { tickToPrice, getAmountsForLiquidity, getSqrtPriceAtTick, formatTokenAmount, formatSmallDecimal } from '$lib/contracts/tickMath';
   import TokenIcon from './TokenIcon.svelte';
 
   Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
@@ -43,7 +43,9 @@
     if (p >= 1e9) return p.toExponential(2);
     if (p >= 1) return p.toPrecision(6).replace(/\.?0+$/, '');
     if (p >= 0.0001) return p.toPrecision(4).replace(/\.?0+$/, '');
-    return p.toExponential(2);
+    const digits = Math.max(2, -Math.floor(Math.log10(p)) + 3);
+    const fixed = p.toFixed(Math.min(digits, 18));
+    return formatSmallDecimal(fixed) ?? fixed;
   }
 
   function orderTokenAmounts(order: { tickLower: number; tickUpper: number; liquidity: bigint }): { amount0: bigint; amount1: bigint } {

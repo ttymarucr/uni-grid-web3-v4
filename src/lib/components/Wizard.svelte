@@ -1,7 +1,7 @@
 <script lang="ts">
   import { connected, signerAddress, chainId as chainIdStore } from '$lib/stores/wallet';
   import { getGridHookAddress } from '$lib/contracts/config';
-  import { executeTransaction } from '$lib/contracts/txWrapper';
+  import { executeTransaction, ensureChain } from '$lib/contracts/txWrapper';
   import { addToast } from '$lib/stores/toasts';
   import {
     getGridConfig,
@@ -35,7 +35,7 @@
   } from '$lib/contracts/gridUiShared';
   import { getPresetsForChain, isNativeToken } from '$lib/contracts/poolPresets';
   import { savePosition } from '$lib/contracts/customPositions';
-  import { getTokenAmountsForOrders, formatTokenAmount, parseTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, tickToPrice } from '$lib/contracts/tickMath';
+  import { getTokenAmountsForOrders, formatTokenAmount, parseTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, tickToPrice, formatSmallDecimal } from '$lib/contracts/tickMath';
   import { STRATEGY_PRESETS, DIST_LABELS, DIST_DESCRIPTIONS } from '$lib/contracts/strategyPresets';
   import Icon from '@iconify/svelte';
   import {
@@ -216,33 +216,38 @@
 
   // ── Chain change detection ──
   let prevChain = $chainIdStore;
+  let intentionalSwitch = false;
   $: if ($chainIdStore !== prevChain) {
     prevChain = $chainIdStore;
-    const reset = createChainResetState('wizard');
-    selectedPresetIdx = reset.selectedPresetIdx;
-    currency0 = reset.currency0;
-    currency1 = reset.currency1;
-    currency0Symbol = reset.currency0Symbol;
-    currency1Symbol = reset.currency1Symbol;
-    currency0Decimals = reset.currency0Decimals;
-    currency1Decimals = reset.currency1Decimals;
-    currency0DecimalsResolved = reset.currency0DecimalsResolved;
-    currency1DecimalsResolved = reset.currency1DecimalsResolved;
-    tokenDecimalsCache.clear();
-    inputAmount0 = reset.inputAmount0;
-    inputAmount1 = reset.inputAmount1;
-    balance0 = reset.balance0;
-    balance1 = reset.balance1;
-    refAmount0 = reset.refAmount0;
-    refAmount1 = reset.refAmount1;
-    poolState = reset.poolState;
-    userState = reset.userState;
-    gridConfig = reset.gridConfig;
+    if (intentionalSwitch) {
+      intentionalSwitch = false;
+    } else {
+      const reset = createChainResetState('wizard');
+      selectedPresetIdx = reset.selectedPresetIdx;
+      currency0 = reset.currency0;
+      currency1 = reset.currency1;
+      currency0Symbol = reset.currency0Symbol;
+      currency1Symbol = reset.currency1Symbol;
+      currency0Decimals = reset.currency0Decimals;
+      currency1Decimals = reset.currency1Decimals;
+      currency0DecimalsResolved = reset.currency0DecimalsResolved;
+      currency1DecimalsResolved = reset.currency1DecimalsResolved;
+      tokenDecimalsCache.clear();
+      inputAmount0 = reset.inputAmount0;
+      inputAmount1 = reset.inputAmount1;
+      balance0 = reset.balance0;
+      balance1 = reset.balance1;
+      refAmount0 = reset.refAmount0;
+      refAmount1 = reset.refAmount1;
+      poolState = reset.poolState;
+      userState = reset.userState;
+      gridConfig = reset.gridConfig;
     gridOrders = reset.gridOrders;
     plannedWeights = reset.plannedWeights;
     referenceTick = reset.referenceTick;
     view = 'wizard';
     wizardStep = reset.wizardStep;
+    }
   }
 
   // ── Strategy state ──
@@ -310,7 +315,8 @@
     if (price >= 1) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
     // For very small prices, show enough significant digits
     const digits = Math.max(2, -Math.floor(Math.log10(price)) + 3);
-    return price.toFixed(Math.min(digits, 18));
+    const fixed = price.toFixed(Math.min(digits, 18));
+    return formatSmallDecimal(fixed) ?? fixed;
   }
 
   // ── Preview state ──
@@ -470,6 +476,8 @@
     }
     loadingData = true;
     try {
+      intentionalSwitch = true;
+      await ensureChain();
       const key = buildPoolKey();
       const state = await fetchPoolDataAction({
         hookAddress,
@@ -484,7 +492,8 @@
       gridOrders = state.gridOrders;
       plannedWeights = state.plannedWeights;
       referenceTick = state.referenceTick;
-      if (state.syncedConfig) {
+      // Only auto-apply config when grid is deployed (user will be redirected to Profile)
+      if (state.syncedConfig && userState?.deployed) {
         cfgGridSpacing = state.syncedConfig.cfgGridSpacing;
         cfgMaxOrders = state.syncedConfig.cfgMaxOrders;
         cfgRebalanceBps = state.syncedConfig.cfgRebalanceBps;
@@ -499,7 +508,30 @@
       return false;
     } finally {
       loadingData = false;
+      intentionalSwitch = false;
     }
+  }
+
+  // ── Reuse previous config ──
+  $: hasPreviousConfig = gridConfig != null && gridConfig.maxOrders > 0 && !userState?.deployed;
+
+  function usePreviousConfig() {
+    if (!gridConfig) return;
+    cfgGridSpacing = gridConfig.gridSpacing;
+    cfgMaxOrders = gridConfig.maxOrders;
+    cfgRebalanceBps = gridConfig.rebalanceThresholdBps;
+    cfgDistType = gridConfig.distributionType;
+    cfgAutoRebalance = gridConfig.autoRebalance;
+    cfgMaxSlippageDelta0 = formatTokenAmount(gridConfig.maxSlippageDelta0, currency0Decimals);
+    cfgMaxSlippageDelta1 = formatTokenAmount(gridConfig.maxSlippageDelta1, currency1Decimals);
+    selectedStrategyIdx = -1;
+    previewedOrders = [];
+    inputAmount0 = '';
+    inputAmount1 = '';
+    deployLiquidity = '';
+    wizardStep = 3;
+    triggerWeightPreview();
+    fetchBalances();
   }
 
   // ── Wizard navigation ──
@@ -535,7 +567,6 @@
       addToast('error', 'Please enter token amounts');
       return;
     }
-    await handleComputeOrders();
     wizardStep = 4;
   }
 
@@ -569,6 +600,22 @@
     triggerWeightPreview();
   }
 
+  // Auto-compute grid orders when amounts or config change
+  $: if (wizardStep >= 3 && deployLiquidity && previewedWeights.length > 0 && poolState) {
+    try {
+      previewedOrders = computeGridOrdersPreviewAction({
+        effectiveTick,
+        cfgGridSpacing,
+        tickSpacing,
+        cfgMaxOrders,
+        previewedWeights,
+        deployLiquidity,
+      });
+    } catch {
+      previewedOrders = [];
+    }
+  }
+
   async function handleComputeOrders() {
     if (!poolState || !deployLiquidity || previewedWeights.length === 0) return;
     try {
@@ -600,6 +647,11 @@
   $: mismatch0Bps = mismatchBps(enteredAmount0Raw, estimatedAmounts.totalAmount0);
   $: mismatch1Bps = mismatchBps(enteredAmount1Raw, estimatedAmounts.totalAmount1);
   $: hasAmountMismatchWarning = mismatch0Bps > AMOUNT_MISMATCH_WARN_BPS || mismatch1Bps > AMOUNT_MISMATCH_WARN_BPS;
+
+  // ── Insufficient balance warnings (Step 3) — validated against estimated on-chain amounts ──
+  $: insufficientBalance0 = estimatedAmounts.totalAmount0 > 0n && estimatedAmounts.totalAmount0 > balance0 && !(refAmount0 === 0n && refAmount1 > 0n);
+  $: insufficientBalance1 = estimatedAmounts.totalAmount1 > 0n && estimatedAmounts.totalAmount1 > balance1 && !(refAmount1 === 0n && refAmount0 > 0n);
+  $: hasInsufficientBalance = insufficientBalance0 || insufficientBalance1;
 
   function getNativeDeployValue(maxD0: bigint, maxD1: bigint): bigint {
     return getNativeDeployValueShared({
@@ -658,6 +710,7 @@
       return;
     }
     deploying = true;
+    intentionalSwitch = true;
     try {
       // 0. Initialize pool in PoolManager (if not yet initialized)
       if (needsPoolInit) {
@@ -737,9 +790,11 @@
       push('/profile');
     } catch (e: any) {
       addToast('error', `Deploy failed: ${e.shortMessage || e.message}`);
+      wizardStep = 3;
     } finally {
       deploying = false;
       deployStepLabel = '';
+      intentionalSwitch = false;
     }
   }
 
@@ -950,6 +1005,18 @@
         <h2 class="mb-1 text-[1.15rem] font-extrabold">Choose Strategy</h2>
         <p class="mb-4 text-muted text-[0.85rem]">Select a grid strategy or configure custom parameters.</p>
 
+        {#if hasPreviousConfig}
+          <div class="mb-5 p-4 rounded-xl border border-accent bg-glow">
+            <p class="text-[0.85rem] font-semibold text-text mb-1">Previous configuration found</p>
+            <p class="text-[0.78rem] text-muted mb-3">
+              {gridConfig.maxOrders} orders &middot; {DIST_LABELS[gridConfig.distributionType]} &middot; spacing {gridConfig.gridSpacing} &middot; rebalance {(gridConfig.rebalanceThresholdBps / 100).toFixed(2)}%
+            </p>
+            <button class={btnPrimary} on:click={usePreviousConfig}>
+              Use Previous Config
+            </button>
+          </div>
+        {/if}
+
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
           {#each STRATEGY_PRESETS as preset, i}
             <button
@@ -1113,9 +1180,15 @@
               </span>
             </div>
             <input class={inputCls} type="text" bind:value={inputAmount0} on:input={onAmount0Input} placeholder="0.0" disabled={refAmount0 === 0n && refAmount1 > 0n} />
+            {#if estimatedAmounts.totalAmount0 > 0n}
+              <span class="text-[0.72rem] text-muted">~{formatTokenAmount(estimatedAmounts.totalAmount0, currency0Decimals)} Required</span>
+            {/if}
             {#if refAmount0 === 0n && refAmount1 > 0n}
               <span class="text-[0.72rem] text-muted italic">Not required for current grid range</span>
             {:else}
+              {#if insufficientBalance0}
+                <span class="text-[0.72rem] font-semibold text-red-500">Insufficient balance (have {formatTokenAmount(balance0, currency0Decimals)})</span>
+              {/if}
               <div class="flex gap-2">
                 {#each [25, 50, 100] as pct}
                   <button
@@ -1138,9 +1211,15 @@
               </span>
             </div>
             <input class={inputCls} type="text" bind:value={inputAmount1} on:input={onAmount1Input} placeholder="0.0" disabled={refAmount1 === 0n && refAmount0 > 0n} />
+            {#if estimatedAmounts.totalAmount1 > 0n}
+              <span class="text-[0.72rem] text-muted">~{formatTokenAmount(estimatedAmounts.totalAmount1, currency1Decimals)} Required</span>
+            {/if}
             {#if refAmount1 === 0n && refAmount0 > 0n}
               <span class="text-[0.72rem] text-muted italic">Not required for current grid range</span>
             {:else}
+              {#if insufficientBalance1}
+                <span class="text-[0.72rem] font-semibold text-red-500">Insufficient balance (have {formatTokenAmount(balance1, currency1Decimals)})</span>
+              {/if}
               <div class="flex gap-2">
                 {#each [25, 50, 100] as pct}
                   <button
@@ -1194,12 +1273,7 @@
           <WeightChart weights={previewedWeights} label="Weight Distribution" />
         {/if}
 
-        <!-- Preview grid orders -->
-        {#if deployLiquidity && previewedWeights.length > 0}
-          <button class="{btnOutline} mt-4" on:click={handleComputeOrders}>
-            Preview Grid Orders
-          </button>
-        {/if}
+        <!-- Grid orders preview (auto-computed) -->
         {#if previewedOrders.length > 0}
           <div class="mt-4">
             <GridOrdersChart
@@ -1226,7 +1300,7 @@
 
         <div class="flex gap-3 mt-5">
           <button class={btnOutline} on:click={() => (wizardStep = 2)}>Back</button>
-          <button class={btnPrimary} on:click={handlePreviewNext} disabled={!deployLiquidity}>
+          <button class={btnPrimary} on:click={handlePreviewNext} disabled={!deployLiquidity || hasInsufficientBalance}>
             Continue to Deploy
           </button>
         </div>
@@ -1273,27 +1347,21 @@
           </div>
         </div>
 
-        {#if advancedMode}
         <div class="mb-5 rounded-xl border border-line bg-surface-strong p-4 text-sm">
-          <div class="mb-2 font-bold text-text">Pre-Submit Amount Check</div>
+          <div class="mb-2 font-bold text-text">Deploy Summary</div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <div class="text-[0.72rem] uppercase tracking-wide text-muted">{currency0Symbol || 'Token0'}</div>
-              <div class="text-text">Entered: {inputAmount0 || '0'} ({currency0Decimals}d)</div>
-              <div class="text-muted text-[0.78rem] font-mono">Raw: {enteredAmount0Raw.toString()}</div>
-              <div class="text-muted text-[0.78rem]">Estimated raw: {estimatedAmounts.totalAmount0.toString()}</div>
+              <div class="text-text">~{formatTokenAmount(estimatedAmounts.totalAmount0, currency0Decimals)}</div>
             </div>
             <div>
               <div class="text-[0.72rem] uppercase tracking-wide text-muted">{currency1Symbol || 'Token1'}</div>
-              <div class="text-text">Entered: {inputAmount1 || '0'} ({currency1Decimals}d)</div>
-              <div class="text-muted text-[0.78rem] font-mono">Raw: {enteredAmount1Raw.toString()}</div>
-              <div class="text-muted text-[0.78rem]">Estimated raw: {estimatedAmounts.totalAmount1.toString()}</div>
+              <div class="text-text">~{formatTokenAmount(estimatedAmounts.totalAmount1, currency1Decimals)}</div>
             </div>
           </div>
           {#if nativeDeployValue > 0n}
             <div class="mt-3 text-[0.78rem] text-muted">
               Native ETH value to send: <span class="font-mono text-text">{formatTokenAmount(nativeDeployValue, 18)} ETH</span>
-              <span class="text-muted"> (raw: {nativeDeployValue.toString()})</span>
             </div>
           {/if}
           {#if hasAmountMismatchWarning}
@@ -1312,7 +1380,6 @@
             </div>
           {/if}
         </div>
-        {/if}
 
         {#if deploying && deployStepLabel}
           <div class="flex items-center gap-3 mb-4 p-3 rounded-xl border border-accent/20" style="background: rgba(23,107,82,0.05)">

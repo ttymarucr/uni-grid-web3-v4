@@ -1,7 +1,7 @@
 <script lang="ts">
   import { connected, signerAddress, chainId as chainIdStore } from '$lib/stores/wallet';
   import { getGridHookAddress } from '$lib/contracts/config';
-  import { executeTransaction } from '$lib/contracts/txWrapper';
+  import { executeTransaction, ensureChain } from '$lib/contracts/txWrapper';
   import { addToast } from '$lib/stores/toasts';
   import {
     getGridConfig,
@@ -21,7 +21,7 @@
   import {
     tokenLabel,
   } from '$lib/contracts/gridUiShared';
-  import { getTokenAmountsForOrders, formatTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, formatRawTokenAmount, tickToPrice } from '$lib/contracts/tickMath';
+  import { getTokenAmountsForOrders, formatTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, formatRawTokenAmount, tickToPrice, formatSmallDecimal } from '$lib/contracts/tickMath';
   import { DIST_LABELS } from '$lib/contracts/strategyPresets';
   import {
     buildPoolKey as buildPoolKeyShared,
@@ -69,11 +69,19 @@
     const user = $signerAddress as Address;
     if (!user || !hookAddress) return;
     scanningPositions = true;
-    const chainId = $chainIdStore ?? 0;
-    const stored = getStoredPositions(chainId, user);
-    deployedPositions = await scanDeployedPositionsForUser(hookAddress, user, chainId, stored);
-    scanningPositions = false;
-    hasScanned = true;
+    intentionalSwitch = true;
+    try {
+      await ensureChain();
+      const chainId = $chainIdStore ?? 0;
+      const stored = getStoredPositions(chainId, user);
+      deployedPositions = await scanDeployedPositionsForUser(hookAddress, user, chainId, stored);
+    } catch {
+      // Silent — scan is best-effort
+    } finally {
+      scanningPositions = false;
+      hasScanned = true;
+      intentionalSwitch = false;
+    }
   }
 
   // ── Hook address ──
@@ -105,25 +113,30 @@
 
   // ── Chain change detection ──
   let prevChain = $chainIdStore;
+  let intentionalSwitch = false;
   $: if ($chainIdStore !== prevChain) {
     prevChain = $chainIdStore;
-    const reset = createChainResetState();
-    currency0 = reset.currency0;
-    currency1 = reset.currency1;
-    currency0Symbol = reset.currency0Symbol;
-    currency1Symbol = reset.currency1Symbol;
-    currency0Decimals = reset.currency0Decimals;
-    currency1Decimals = reset.currency1Decimals;
-    poolState = reset.poolState;
-    userState = reset.userState;
-    gridConfig = reset.gridConfig;
-    gridOrders = reset.gridOrders;
-    plannedWeights = reset.plannedWeights;
-    orderFees = [];
-    referenceTick = reset.referenceTick;
-    deployedPositions = reset.deployedPositions as DeployedPosition[];
-    hasScanned = reset.hasScanned;
-    view = 'positions';
+    if (intentionalSwitch) {
+      intentionalSwitch = false;
+    } else {
+      const reset = createChainResetState();
+      currency0 = reset.currency0;
+      currency1 = reset.currency1;
+      currency0Symbol = reset.currency0Symbol;
+      currency1Symbol = reset.currency1Symbol;
+      currency0Decimals = reset.currency0Decimals;
+      currency1Decimals = reset.currency1Decimals;
+      poolState = reset.poolState;
+      userState = reset.userState;
+      gridConfig = reset.gridConfig;
+      gridOrders = reset.gridOrders;
+      plannedWeights = reset.plannedWeights;
+      orderFees = [];
+      referenceTick = reset.referenceTick;
+      deployedPositions = reset.deployedPositions as DeployedPosition[];
+      hasScanned = reset.hasScanned;
+      view = 'positions';
+    }
   }
 
   // ── Strategy state ──
@@ -362,7 +375,12 @@
     const humanPrice = rawPrice * (10 ** dec0) / (10 ** dec1);
     const amt1InToken0 = humanPrice > 0 ? amt1 / humanPrice : 0;
     const total = amt0 + amt1InToken0;
-    return total < 0.01 ? total.toExponential(2) : total.toFixed(total < 1 ? 4 : 2);
+    if (total < 0.01) {
+      const digits = Math.max(2, -Math.floor(Math.log10(total)) + 3);
+      const fixed = total.toFixed(Math.min(digits, 18));
+      return formatSmallDecimal(fixed) ?? fixed;
+    }
+    return total.toFixed(total < 1 ? 4 : 2);
   }
 
   // ── Native currency helper ──

@@ -395,26 +395,30 @@ export async function fetchPoolDataAction(params: {
     cfgMaxSlippageDelta1: string;
   } | null = null;
 
+  // Always read config — it persists after closeGrid and can be reused
+  const cfgResult = await getGridConfig(params.hookAddress, params.poolKey, params.user);
+  if (cfgResult.maxOrders > 0) {
+    gridConfigResult = cfgResult;
+    syncedConfig = {
+      cfgGridSpacing: cfgResult.gridSpacing,
+      cfgMaxOrders: cfgResult.maxOrders,
+      cfgRebalanceBps: cfgResult.rebalanceThresholdBps,
+      cfgDistType: cfgResult.distributionType,
+      cfgAutoRebalance: cfgResult.autoRebalance,
+      cfgMaxSlippageDelta0: formatTokenAmount(cfgResult.maxSlippageDelta0, params.currency0Decimals),
+      cfgMaxSlippageDelta1: formatTokenAmount(cfgResult.maxSlippageDelta1, params.currency1Decimals),
+    };
+  }
+
   if (userStateResult.deployed) {
-    const [cfg, orders, weights, fees] = await Promise.all([
-      getGridConfig(params.hookAddress, params.poolKey, params.user),
+    const [orders, weights, fees] = await Promise.all([
       getGridOrders(params.hookAddress, params.poolKey, params.user),
       getPlannedWeights(params.hookAddress, params.poolKey, params.user),
       getAccumulatedFees(params.hookAddress, params.poolKey, params.user),
     ]);
-    gridConfigResult = cfg;
     gridOrdersResult = orders;
     plannedWeightsResult = weights;
     orderFeesResult = fees;
-    syncedConfig = {
-      cfgGridSpacing: cfg.gridSpacing,
-      cfgMaxOrders: cfg.maxOrders,
-      cfgRebalanceBps: cfg.rebalanceThresholdBps,
-      cfgDistType: cfg.distributionType,
-      cfgAutoRebalance: cfg.autoRebalance,
-      cfgMaxSlippageDelta0: formatTokenAmount(cfg.maxSlippageDelta0, params.currency0Decimals),
-      cfgMaxSlippageDelta1: formatTokenAmount(cfg.maxSlippageDelta1, params.currency1Decimals),
-    };
   }
 
   return {

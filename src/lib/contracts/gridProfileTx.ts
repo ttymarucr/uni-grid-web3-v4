@@ -1,5 +1,5 @@
 import type { Address } from 'viem';
-import { executeTransaction } from '$lib/contracts/txWrapper';
+import { executeTransaction, ensureChain } from '$lib/contracts/txWrapper';
 import {
   rebalance as writeRebalance,
   closeGrid as writeCloseGrid,
@@ -25,6 +25,7 @@ export async function ensurePermit2Allowances(params: {
   onStep?: (msg: string) => void;
 }): Promise<void> {
   const { user, hookAddress, tokens, onStep } = params;
+  await ensureChain();
 
   for (const tok of tokens) {
     if (isNativeToken(tok.addr)) continue;
@@ -74,6 +75,7 @@ export async function runCloseGrid(
   poolKey: PoolKey,
   deadlineMinutes: number,
 ): Promise<void> {
+  await ensureChain();
   await executeTransaction('Close Grid', () =>
     writeCloseGrid(hookAddress, poolKey, getDeadline(deadlineMinutes)),
   );
@@ -84,6 +86,7 @@ export async function runSetKeeper(
   keeperAddress: Address,
   keeperAuthorized: boolean,
 ): Promise<void> {
+  await ensureChain();
   await executeTransaction(keeperAuthorized ? 'Authorize Keeper' : 'Revoke Keeper', () =>
     writeSetKeeper(hookAddress, keeperAddress, keeperAuthorized),
   );

@@ -147,6 +147,27 @@ export function getTokenAmountsForOrders(
   return { totalAmount0, totalAmount1 };
 }
 
+const SUBSCRIPT_DIGITS = '\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089';
+
+/** Convert a number to Unicode subscript digits, e.g. 4 → "₄", 12 → "₁₂" */
+export function toSubscript(n: number): string {
+  return String(n).split('').map(ch => SUBSCRIPT_DIGITS[Number(ch)] ?? ch).join('');
+}
+
+/**
+ * Format a small decimal with subscript leading-zero count.
+ * e.g. 0.00000939 → "0.0₅939" (5 leading zeros, then significant digits).
+ * Returns null if the format doesn't apply.
+ */
+export function formatSmallDecimal(value: string): string | null {
+  const m = value.match(/^0\.(0{2,})(\d+)$/);
+  if (!m) return null;
+  const leadingZeros = m[1].length;
+  const significant = m[2].replace(/0+$/, '');
+  if (!significant) return null;
+  return `0.0${toSubscript(leadingZeros)}${significant}`;
+}
+
 export function formatTokenAmount(amount: bigint, decimals: number): string {
   if (amount === 0n) return '0';
   const divisor = 10n ** BigInt(decimals);
@@ -155,7 +176,12 @@ export function formatTokenAmount(amount: bigint, decimals: number): string {
   const fractionStr = remainder.toString().padStart(decimals, '0');
   const trimmed = fractionStr.slice(0, 6).replace(/0+$/, '');
   if (trimmed === '') return whole.toString();
-  return `${whole}.${trimmed}`;
+  const plain = `${whole}.${trimmed}`;
+  if (whole === 0n) {
+    const sub = formatSmallDecimal(plain);
+    if (sub) return sub;
+  }
+  return plain;
 }
 
 export function formatRawTokenAmount(amount: bigint, decimals: number): string {
