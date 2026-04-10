@@ -12,14 +12,14 @@
     getTokenBalance,
   } from '$lib/contracts/permit2';
   import { getPresetsForChain, isNativeToken, type PoolPreset } from '$lib/contracts/poolPresets';
-  import { formatTokenAmount, parseTokenAmount, getSqrtPriceAtTick, tickToPrice } from '$lib/contracts/tickMath';
+  import { formatTokenAmount, formatRawTokenAmount, formatSmallDecimal, parseTokenAmount, getSqrtPriceAtTick, tickToPrice } from '$lib/contracts/tickMath';
   import { SLIPPAGE_OPTIONS } from '$lib/contracts/gridUiShared';
   import { executeSwap, estimateSwapOutput, poolFeeToBps } from '$lib/contracts/swapRouter';
   import TokenIcon from './TokenIcon.svelte';
   import type { Address } from 'viem';
 
   const inputCls = 'w-full py-3 px-4 border border-line rounded-[10px] bg-surface-strong text-text text-lg focus:outline-2 focus:outline-accent focus:-outline-offset-1';
-  const btnPrimary = 'w-full cursor-pointer border-none rounded-xl py-3 px-5 font-bold text-sm bg-accent text-white hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
+  const btnPrimary = 'w-full cursor-pointer border-none rounded-xl py-3 px-5 font-bold text-sm bg-accent text-on-accent hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
   const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-4 sm:p-5 shadow-card';
   const labelCls = 'text-[0.78rem] font-bold text-muted uppercase tracking-wide';
 
@@ -35,6 +35,7 @@
   let swapping = false;
   let approving = false;
   let direction: 'zeroForOne' | 'oneForZero' = 'zeroForOne';
+  let invertPrice = false;
 
   // Pool data
   let currentTick = 0;
@@ -86,6 +87,20 @@
 
   // Current price display
   $: currentPrice = poolLoaded && currentTick !== 0 ? tickToPrice(currentTick) : null;
+  $: decimalAdjustment = selectedPreset ? Math.pow(10, selectedPreset.currency0Decimals - selectedPreset.currency1Decimals) : 1;
+  $: displayPrice = currentPrice !== null ? (invertPrice ? 1 / (currentPrice * decimalAdjustment) : currentPrice * decimalAdjustment) : null;
+  $: priceBaseSymbol = invertPrice ? selectedPreset?.currency1Symbol : selectedPreset?.currency0Symbol;
+  $: priceQuoteSymbol = invertPrice ? selectedPreset?.currency0Symbol : selectedPreset?.currency1Symbol;
+
+  function formatPrice(p: number): string {
+    if (!isFinite(p) || p === 0) return '0';
+    if (p >= 1e9) return p.toExponential(2);
+    if (p >= 1) return p.toPrecision(6).replace(/\.?0+$/, '');
+    if (p >= 0.0001) return p.toPrecision(4).replace(/\.?0+$/, '');
+    const digits = Math.max(2, -Math.floor(Math.log10(p)) + 3);
+    const fixed = p.toFixed(Math.min(digits, 18));
+    return formatSmallDecimal(fixed) ?? fixed;
+  }
 
   // ── Chain/preset reset ──
   let prevChainId: number | null = null;
@@ -161,7 +176,7 @@
 
   function setMaxAmount() {
     if (balanceLoaded && inputBalance > 0n) {
-      amountIn = formatTokenAmount(inputBalance, inputDecimals);
+      amountIn = formatRawTokenAmount(inputBalance, inputDecimals);
     }
   }
 
@@ -293,10 +308,15 @@
       <div class={card + ' space-y-1 text-sm'}>
         <div class="flex justify-between">
           <span class="text-muted">Current Price</span>
-          <span class="font-mono">
-            {#if currentPrice !== null}
-              {currentPrice < 0.01 ? currentPrice.toExponential(4) : currentPrice.toFixed(6)}
-              <span class="text-muted text-xs">{selectedPreset.currency1Symbol}/{selectedPreset.currency0Symbol}</span>
+          <span class="font-mono flex items-center gap-1">
+            {#if displayPrice !== null}
+              {formatPrice(displayPrice)}
+              <span class="text-muted text-xs">{priceQuoteSymbol}/{priceBaseSymbol}</span>
+              <button
+                class="ml-1 text-muted hover:text-accent cursor-pointer bg-transparent border-none text-xs leading-none"
+                title="Invert price"
+                on:click={() => invertPrice = !invertPrice}
+              >⇄</button>
             {:else}
               -
             {/if}
@@ -318,7 +338,7 @@
           <span class={labelCls}>You pay</span>
           {#if balanceLoaded}
             <button class="text-xs text-muted hover:text-accent cursor-pointer bg-transparent border-none" on:click={setMaxAmount}>
-              Balance: {formatTokenAmount(inputBalance, inputDecimals)}
+              Balance: {formatRawTokenAmount(inputBalance, inputDecimals)}
             </button>
           {/if}
         </div>
@@ -351,12 +371,12 @@
           <TokenIcon symbol={outputSymbol} size={24} />
           <span class="font-bold text-sm min-w-[50px]">{outputSymbol}</span>
           <p class="flex-1 text-right text-lg font-mono text-text">
-            {estimatedOutput > 0n ? formatTokenAmount(estimatedOutput, outputDecimals) : '0.0'}
+            {estimatedOutput > 0n ? formatRawTokenAmount(estimatedOutput, outputDecimals) : '0.0'}
           </p>
         </div>
         {#if estimatedOutput > 0n && slippageNum > 0}
           <p class="text-xs text-muted mt-2 text-right">
-            Min. received: {formatTokenAmount(minOutput, outputDecimals)} {outputSymbol}
+            Min. received: {formatRawTokenAmount(minOutput, outputDecimals)} {outputSymbol}
           </p>
         {/if}
       </div>

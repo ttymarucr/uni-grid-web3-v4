@@ -3,6 +3,7 @@
     import { reconnect } from '@wagmi/core';
     import { config } from '$lib/wagmi/client';
     import { wagmiLoaded } from '$lib/stores/wallet';
+    import { initTheme } from '$lib/stores/theme';
     import Router from 'svelte-spa-router';
     import { routes } from '$lib/routes';
     import Header from '$lib/components/Header.svelte';
@@ -10,6 +11,7 @@
     import Toast from '$lib/components/Toast.svelte';
 
     onMount(async () => {
+        initTheme();
         await reconnect(config);
         wagmiLoaded.set(true);
     });

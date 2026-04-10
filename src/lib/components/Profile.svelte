@@ -42,13 +42,13 @@
 
   // ── Style classes ──
   const inputCls = 'py-2 px-3 border border-line rounded-[10px] bg-surface-strong text-text text-[0.9rem] focus:outline-2 focus:outline-accent focus:-outline-offset-1';
-  const btnPrimary = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-accent text-white hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
+  const btnPrimary = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-accent text-on-accent hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
   const btnOutline = 'cursor-pointer rounded-xl py-2.5 px-5 font-bold text-sm bg-transparent text-accent border border-accent hover:bg-glow disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
-  const btnDanger = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
+  const btnDanger = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-danger text-on-accent hover:bg-danger-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
   const actionBtnBase = 'w-9 h-9 inline-flex items-center justify-center rounded-full transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2';
-  const actionBtnPrimary = `${actionBtnBase} border-none bg-accent text-white hover:bg-accent-strong`;
+  const actionBtnPrimary = `${actionBtnBase} border-none bg-accent text-on-accent hover:bg-accent-strong`;
   const actionBtnNeutral = `${actionBtnBase} border border-line bg-surface-strong text-text hover:border-accent hover:bg-glow`;
-  const actionBtnDanger = `${actionBtnBase} border-none bg-red-600 text-white hover:bg-red-700`;
+  const actionBtnDanger = `${actionBtnBase} border-none bg-danger text-on-accent hover:bg-danger-strong`;
   const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-4 sm:p-6 shadow-card';
   const labelCls = 'text-[0.78rem] font-bold text-muted uppercase tracking-wide';
   const statLabel = 'text-[0.72rem] font-bold text-muted uppercase tracking-wider';
@@ -515,7 +515,7 @@
       <div class="relative inline-flex items-center">
         <input type="checkbox" bind:checked={advancedMode} class="sr-only peer" />
         <div class="w-9 h-5 bg-line rounded-full peer-checked:bg-accent transition-colors"></div>
-        <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+        <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-toggle-knob rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
       </div>
     </label>
   </div>
@@ -605,7 +605,7 @@
               {#if pos.apr != null}
                 <div class="flex flex-col gap-0.5">
                   <span class={statLabel}>APR</span>
-                  <span class="text-sm font-extrabold font-mono text-green-400">{pos.apr.toFixed(2)}%</span>
+                  <span class="text-sm font-extrabold font-mono text-success">{pos.apr.toFixed(2)}%</span>
                 </div>
               {/if}
             </div>
@@ -690,7 +690,7 @@
         {#if poolState}
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>{usingReferenceTick ? 'Market Tick (approx.)' : 'Current Tick'}</span>
-            <span class="text-base font-semibold font-mono">{effectiveTick}{#if usingReferenceTick} <span class="text-[0.68rem] text-yellow-400 font-normal">via canonical pool</span>{/if}</span>
+            <span class="text-base font-semibold font-mono">{effectiveTick}{#if usingReferenceTick} <span class="text-[0.68rem] text-warning font-normal">via canonical pool</span>{/if}</span>
           </div>
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>Initialized</span>
@@ -738,17 +738,17 @@
         {#if orderFees.length > 0 && (totalFees0 > 0n || totalFees1 > 0n)}
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>{currency0Symbol || 'Token0'} Fees</span>
-            <span class="text-base font-semibold font-mono text-green-400" title={formatRawTokenAmount(totalFees0, currency0Decimals)}>~{formatTokenAmount(totalFees0, currency0Decimals)}</span>
+            <span class="text-base font-semibold font-mono text-success" title={formatRawTokenAmount(totalFees0, currency0Decimals)}>~{formatTokenAmount(totalFees0, currency0Decimals)}</span>
           </div>
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>{currency1Symbol || 'Token1'} Fees</span>
-            <span class="text-base font-semibold font-mono text-green-400" title={formatRawTokenAmount(totalFees1, currency1Decimals)}>~{formatTokenAmount(totalFees1, currency1Decimals)}</span>
+            <span class="text-base font-semibold font-mono text-success" title={formatRawTokenAmount(totalFees1, currency1Decimals)}>~{formatTokenAmount(totalFees1, currency1Decimals)}</span>
           </div>
         {/if}
         {#if aprData}
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>APR</span>
-            <span class="text-base font-extrabold font-mono text-green-400">{aprData.apr.toFixed(2)}%</span>
+            <span class="text-base font-extrabold font-mono text-success">{aprData.apr.toFixed(2)}%</span>
           </div>
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>Period</span>
@@ -766,7 +766,7 @@
 
     <!-- Rebalance Preview -->
     {#if rebalanceEstimate}
-      <section class="{card} border-l-4 {rebalanceEstimate.thresholdMet ? 'border-l-accent' : 'border-l-yellow-500'}">
+      <section class="{card} border-l-4 {rebalanceEstimate.thresholdMet ? 'border-l-accent' : 'border-l-warning'}">
         <h2 class="text-[1rem] font-extrabold mb-3">Rebalance Preview</h2>
         {#if !rebalanceEstimate.thresholdMet}
           <p class="text-[0.82rem] text-muted mb-2">
@@ -781,7 +781,7 @@
             </div>
             <div class="flex flex-col gap-0.5">
               <span class={statLabel}>{currency0Symbol || 'Token0'} Net</span>
-              <span class="font-semibold font-mono {rebalanceEstimate.netDelta0 > 0n ? 'text-red-400' : rebalanceEstimate.netDelta0 < 0n ? 'text-green-400' : 'text-text'}">
+              <span class="font-semibold font-mono {rebalanceEstimate.netDelta0 > 0n ? 'text-danger' : rebalanceEstimate.netDelta0 < 0n ? 'text-success' : 'text-text'}">
                 {formatSignedDelta(rebalanceEstimate.netDelta0, currency0Decimals)}
               </span>
               {#if rebalanceEstimate.netDelta0 > 0n}
@@ -792,7 +792,7 @@
             </div>
             <div class="flex flex-col gap-0.5">
               <span class={statLabel}>{currency1Symbol || 'Token1'} Net</span>
-              <span class="font-semibold font-mono {rebalanceEstimate.netDelta1 > 0n ? 'text-red-400' : rebalanceEstimate.netDelta1 < 0n ? 'text-green-400' : 'text-text'}">
+              <span class="font-semibold font-mono {rebalanceEstimate.netDelta1 > 0n ? 'text-danger' : rebalanceEstimate.netDelta1 < 0n ? 'text-success' : 'text-text'}">
                 {formatSignedDelta(rebalanceEstimate.netDelta1, currency1Decimals)}
               </span>
               {#if rebalanceEstimate.netDelta1 > 0n}
@@ -863,8 +863,8 @@
                     <td class="py-2 px-3 border-b border-line font-mono">{order.tickUpper}</td>
                     <td class="py-2 px-3 border-b border-line font-mono">~{formatTokenAmount(amounts.amount0, currency0Decimals)}</td>
                     <td class="py-2 px-3 border-b border-line font-mono">~{formatTokenAmount(amounts.amount1, currency1Decimals)}</td>
-                    <td class="py-2 px-3 border-b border-line font-mono text-green-400">~{formatTokenAmount(fees.fees0, currency0Decimals)}</td>
-                    <td class="py-2 px-3 border-b border-line font-mono text-green-400">~{formatTokenAmount(fees.fees1, currency1Decimals)}</td>
+                    <td class="py-2 px-3 border-b border-line font-mono text-success">~{formatTokenAmount(fees.fees0, currency0Decimals)}</td>
+                    <td class="py-2 px-3 border-b border-line font-mono text-success">~{formatTokenAmount(fees.fees1, currency1Decimals)}</td>
                   </tr>
                 {/each}
               </tbody>

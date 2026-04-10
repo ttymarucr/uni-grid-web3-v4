@@ -9,12 +9,12 @@
     {#each $toasts as toast (toast.id)}
       <div class="toast flex items-start gap-2.5 py-3 px-4 rounded-[14px] bg-surface-strong border border-line shadow-card animate-slide-in
         {toast.type === 'pending' ? 'border-l-3 border-l-accent' : ''}
-        {toast.type === 'success' ? 'border-l-3 border-l-[#2a9d5c]' : ''}
-        {toast.type === 'error' ? 'border-l-3 border-l-[#c44]' : ''}
+        {toast.type === 'success' ? 'border-l-3 border-l-success' : ''}
+        {toast.type === 'error' ? 'border-l-3 border-l-danger' : ''}
         {toast.type === 'info' ? 'border-l-3 border-l-muted' : ''}">
         <div class="shrink-0 w-[1.4rem] h-[1.4rem] flex items-center justify-center font-extrabold text-[0.9rem]
-          {toast.type === 'success' ? 'text-[#2a9d5c]' : ''}
-          {toast.type === 'error' ? 'text-[#c44]' : ''}
+          {toast.type === 'success' ? 'text-success' : ''}
+          {toast.type === 'error' ? 'text-danger' : ''}
           {toast.type === 'pending' ? 'text-accent' : ''}">
           {#if toast.type === 'pending'}
             <span class="inline-block w-4 h-4 border-2 border-line border-t-accent rounded-full animate-spin" />

@@ -15,7 +15,7 @@ import {
   getUserState,
   previewWeights,
 } from '$lib/contracts/gridHook';
-import { formatTokenAmount, getTokenAmountsForOrders, tickToPrice } from '$lib/contracts/tickMath';
+import { formatTokenAmount, formatRawTokenAmount, getTokenAmountsForOrders, tickToPrice } from '$lib/contracts/tickMath';
 import type { Address } from 'viem';
 import type { GridConfig, GridOrder, OrderFees, PoolKey, PoolState, UserGridState } from '$lib/contracts/gridHook';
 
@@ -544,7 +544,7 @@ export function computeLiquidityFromAmount0(params: {
     const derived1 = (liq * params.refAmount1) / params.refLiquidity;
     return {
       deployLiquidity: liq.toString(),
-      derivedAmount1Text: formatTokenAmount(derived1, params.currency1Decimals),
+      derivedAmount1Text: formatRawTokenAmount(derived1, params.currency1Decimals),
     };
   }
   return { deployLiquidity: liq.toString(), derivedAmount1Text: '0' };
@@ -565,7 +565,7 @@ export function computeLiquidityFromAmount1(params: {
     const derived0 = (liq * params.refAmount0) / params.refLiquidity;
     return {
       deployLiquidity: liq.toString(),
-      derivedAmount0Text: formatTokenAmount(derived0, params.currency0Decimals),
+      derivedAmount0Text: formatRawTokenAmount(derived0, params.currency0Decimals),
     };
   }
   return { deployLiquidity: liq.toString(), derivedAmount0Text: '0' };

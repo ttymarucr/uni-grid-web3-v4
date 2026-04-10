@@ -11,13 +11,17 @@
   let canvas: HTMLCanvasElement;
   let chart: Chart | null = null;
 
-  const ACCENT = '#176b52';
-  const ACCENT_STRONG = '#0d4f3c';
-  const MUTED = '#5e695f';
+  function cssColor(name: string): string {
+    return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
+  }
 
   function buildChart() {
     if (!canvas) return;
     if (chart) chart.destroy();
+
+    const ACCENT = cssColor('accent');
+    const ACCENT_STRONG = cssColor('accent-strong');
+    const MUTED = cssColor('muted');
 
     const centerIdx = Math.floor(weights.length / 2);
     const labels = weights.map((_, i) => String(i + 1));
@@ -71,7 +75,7 @@
               callback: (v) => `${v}`,
             },
             grid: {
-              color: 'rgba(29,38,31,0.08)',
+              color: cssColor('line'),
             },
           },
         },

@@ -21,10 +21,9 @@
   let canvas: HTMLCanvasElement;
   let chart: Chart | null = null;
 
-  const ACCENT = '#176b52';
-  const RED = '#cc4444';
-  const ACCENT_STRONG = '#0d4f3c';
-  const MUTED = '#5e695f';
+  function cssColor(name: string): string {
+    return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
+  }
 
   $: baseSymbol = invertPrice ? token1Symbol : token0Symbol;
   $: quoteSymbol = invertPrice ? token0Symbol : token1Symbol;
@@ -136,7 +135,7 @@
           const d = Math.abs(mid - currentTick);
           if (d < closestDist) { closestDist = d; closestIdx = i; }
         }
-        drawLine(closestIdx, RED, formatPrice(toDisplayPrice(currentTick)));
+        drawLine(closestIdx, cssColor('danger'), formatPrice(toDisplayPrice(currentTick)));
       }
 
       if (centerTick != null && centerTick !== currentTick) {
@@ -147,7 +146,7 @@
           const d = Math.abs(mid - centerTick);
           if (d < closestDist) { closestDist = d; closestIdx = i; }
         }
-        drawLine(closestIdx, ACCENT_STRONG, formatPrice(toDisplayPrice(centerTick)));
+        drawLine(closestIdx, cssColor('accent-strong'), formatPrice(toDisplayPrice(centerTick)));
       }
     },
   };
@@ -156,6 +155,9 @@
     if (!canvas) return;
     if (chart) chart.destroy();
     if (orders.length === 0) return;
+
+    const ACCENT = cssColor('accent');
+    const MUTED = cssColor('muted');
 
     const labels = orders.map((o) => {
       const pLo = formatPrice(toDisplayPrice(o.tickLower));
@@ -233,7 +235,7 @@
               callback: (value) => formatAxisTick(Number(value)),
             },
             grid: {
-              color: 'rgba(29,38,31,0.08)',
+              color: cssColor('line'),
             },
           },
         },
@@ -270,11 +272,11 @@
     {#if token0Symbol && token1Symbol}
       <div class="flex items-center gap-1 text-[0.68rem]">
         <button
-          class="px-2 py-0.5 rounded-l-md font-semibold transition-colors duration-100 {!invertPrice ? 'bg-accent text-white' : 'bg-surface-strong text-muted hover:text-text'}"
+          class="px-2 py-0.5 rounded-l-md font-semibold transition-colors duration-100 {!invertPrice ? 'bg-accent text-on-accent' : 'bg-surface-strong text-muted hover:text-text'}"
           on:click={() => { if (invertPrice) togglePrice(); }}
         >{token1Symbol}/{token0Symbol}</button>
         <button
-          class="px-2 py-0.5 rounded-r-md font-semibold transition-colors duration-100 {invertPrice ? 'bg-accent text-white' : 'bg-surface-strong text-muted hover:text-text'}"
+          class="px-2 py-0.5 rounded-r-md font-semibold transition-colors duration-100 {invertPrice ? 'bg-accent text-on-accent' : 'bg-surface-strong text-muted hover:text-text'}"
           on:click={() => { if (!invertPrice) togglePrice(); }}
         >{token0Symbol}/{token1Symbol}</button>
       </div>
@@ -290,7 +292,7 @@
     <div class="flex gap-4 mt-2 text-[0.7rem]">
       {#if currentTick != null}
         <span class="flex items-center gap-1">
-          <span class="inline-block w-3 h-0.5" style="background:{RED}"></span>
+          <span class="inline-block w-3 h-0.5 bg-danger"></span>
           <span class="text-muted">Current Price: <span class="font-mono font-semibold">{formatPrice(toDisplayPrice(currentTick))}</span>
             {#if priceLabel !== 'Price'}<span class="text-[0.62rem]"> {priceLabel}</span>{/if}
           </span>
@@ -298,7 +300,7 @@
       {/if}
       {#if centerTick != null}
         <span class="flex items-center gap-1">
-          <span class="inline-block w-3 h-0.5" style="background:{ACCENT_STRONG}"></span>
+          <span class="inline-block w-3 h-0.5 bg-accent-strong"></span>
           <span class="text-muted">Grid Center: <span class="font-mono font-semibold">{formatPrice(toDisplayPrice(centerTick))}</span></span>
         </span>
       {/if}

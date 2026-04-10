@@ -10,6 +10,13 @@
     --color-accent: #176b52;
     --color-accent-strong: #0d4f3c;
     --color-glow: rgba(23, 107, 82, 0.18);
+    --color-danger: #dc2626;
+    --color-danger-strong: #b91c1c;
+    --color-success: #16a34a;
+    --color-warning: #ca8a04;
+    --color-warning-strong: #a16207;
+    --color-on-accent: #ffffff;
+    --color-toggle-knob: #ffffff;
     --radius-card: 24px;
     --shadow-card: 0 24px 60px rgba(27, 35, 29, 0.14);
 }
@@ -17,6 +24,27 @@
 :root {
     color-scheme: light;
     font-family: "Manrope", "Segoe UI", sans-serif;
+}
+
+.dark {
+    color-scheme: dark;
+    --color-bg: #0f1410;
+    --color-surface: rgba(20, 28, 22, 0.86);
+    --color-surface-strong: #1a2420;
+    --color-text: #e0e6e1;
+    --color-muted: #8a9a8c;
+    --color-line: rgba(224, 230, 225, 0.14);
+    --color-accent: #2dd4a0;
+    --color-accent-strong: #5eecc0;
+    --color-glow: rgba(45, 212, 160, 0.18);
+    --color-danger: #ef4444;
+    --color-danger-strong: #f87171;
+    --color-success: #4ade80;
+    --color-warning: #facc15;
+    --color-warning-strong: #fde047;
+    --color-on-accent: #0f1410;
+    --color-toggle-knob: #1a2420;
+    --shadow-card: 0 24px 60px rgba(0, 0, 0, 0.4);
 }
 
 * {
@@ -38,6 +66,13 @@ body {
         linear-gradient(180deg, #efe6d7 0%, var(--color-bg) 52%, #e7ded0 100%);
 }
 
+.dark body {
+    background:
+        radial-gradient(circle at top left, rgba(45, 212, 160, 0.08), transparent 28%),
+        radial-gradient(circle at right, rgba(45, 212, 160, 0.06), transparent 20%),
+        linear-gradient(180deg, #0a100c 0%, var(--color-bg) 52%, #0d1610 100%);
+}
+
 body::before {
     content: "";
     position: fixed;
@@ -46,6 +81,10 @@ body::before {
     background-image: linear-gradient(rgba(29, 38, 31, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(29, 38, 31, 0.03) 1px, transparent 1px);
     background-size: 32px 32px;
     mask-image: radial-gradient(circle at center, black, transparent 80%);
+}
+
+.dark body::before {
+    background-image: linear-gradient(rgba(224, 230, 225, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(224, 230, 225, 0.03) 1px, transparent 1px);
 }
 
 a {

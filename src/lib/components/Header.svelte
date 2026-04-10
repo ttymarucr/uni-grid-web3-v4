@@ -5,6 +5,8 @@
   import { connect, switchChain } from '@wagmi/core';
   import { injected } from '@wagmi/connectors';
   import { ensureChain } from '$lib/contracts/txWrapper';
+  import { darkMode, toggleTheme } from '$lib/stores/theme';
+  import { Sun, Moon } from 'lucide-svelte';
   import ChainIcon from './ChainIcon.svelte';
   import { link } from 'svelte-spa-router';
 
@@ -50,6 +52,13 @@
 
     <!-- Desktop wallet controls -->
     <div class="hidden sm:flex items-center gap-3">
+      <button
+        class="cursor-pointer bg-transparent border-none text-muted hover:text-text p-1 transition-colors"
+        on:click={toggleTheme}
+        aria-label={$darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {#if $darkMode}<Sun size={18} />{:else}<Moon size={18} />{/if}
+      </button>
       {#if $connected}
         <ChainIcon chainId={$chainIdStore ?? 0} name={$chainName} size={18} />
         <select
@@ -67,7 +76,7 @@
         <span class="font-mono text-sm text-muted">{$shortAddress}</span>
         <button class="cursor-pointer border border-line rounded-xl py-2 px-4 font-bold text-sm bg-transparent text-muted hover:bg-surface-strong transition-opacity duration-150" on:click={disconnectWagmi}>Disconnect</button>
       {:else}
-        <button class="cursor-pointer border-none rounded-xl py-2 px-4 font-bold text-sm bg-accent text-white hover:bg-accent-strong transition-opacity duration-150 disabled:opacity-50 disabled:cursor-not-allowed" on:click={handleConnect} disabled={connecting || $loading}>
+        <button class="cursor-pointer border-none rounded-xl py-2 px-4 font-bold text-sm bg-accent text-on-accent hover:bg-accent-strong transition-opacity duration-150 disabled:opacity-50 disabled:cursor-not-allowed" on:click={handleConnect} disabled={connecting || $loading}>
           {connecting || $loading ? 'Connecting…' : 'Connect Wallet'}
         </button>
       {/if}
@@ -94,6 +103,13 @@
         <a href="/profile" use:link class="text-muted hover:text-text transition-colors py-1" on:click={() => (menuOpen = false)}>Profile</a>
       </nav>
       <div class="border-t border-line pt-3 flex flex-wrap items-center gap-2">
+        <button
+          class="cursor-pointer bg-transparent border-none text-muted hover:text-text p-1 transition-colors"
+          on:click={toggleTheme}
+          aria-label={$darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {#if $darkMode}<Sun size={18} />{:else}<Moon size={18} />{/if}
+        </button>
         {#if $connected}
           <ChainIcon chainId={$chainIdStore ?? 0} name={$chainName} size={18} />
           <select
@@ -111,7 +127,7 @@
           <span class="font-mono text-sm text-muted">{$shortAddress}</span>
           <button class="cursor-pointer border border-line rounded-xl py-2 px-4 font-bold text-sm bg-transparent text-muted hover:bg-surface-strong transition-opacity duration-150" on:click={() => { disconnectWagmi(); menuOpen = false; }}>Disconnect</button>
         {:else}
-          <button class="cursor-pointer border-none rounded-xl py-2 px-4 font-bold text-sm bg-accent text-white hover:bg-accent-strong transition-opacity duration-150 disabled:opacity-50 disabled:cursor-not-allowed" on:click={handleConnect} disabled={connecting || $loading}>
+          <button class="cursor-pointer border-none rounded-xl py-2 px-4 font-bold text-sm bg-accent text-on-accent hover:bg-accent-strong transition-opacity duration-150 disabled:opacity-50 disabled:cursor-not-allowed" on:click={handleConnect} disabled={connecting || $loading}>
             {connecting || $loading ? 'Connecting…' : 'Connect Wallet'}
           </button>
         {/if}

@@ -35,7 +35,7 @@
   } from '$lib/contracts/gridUiShared';
   import { getPresetsForChain, isNativeToken } from '$lib/contracts/poolPresets';
   import { savePosition } from '$lib/contracts/customPositions';
-  import { getTokenAmountsForOrders, formatTokenAmount, parseTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, tickToPrice, formatSmallDecimal } from '$lib/contracts/tickMath';
+  import { getTokenAmountsForOrders, formatTokenAmount, formatRawTokenAmount, parseTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, tickToPrice, formatSmallDecimal } from '$lib/contracts/tickMath';
   import { STRATEGY_PRESETS, DIST_LABELS, DIST_DESCRIPTIONS } from '$lib/contracts/strategyPresets';
   import Icon from '@iconify/svelte';
   import {
@@ -62,9 +62,9 @@
 
   // ── Style classes ──
   const inputCls = 'py-2 px-3 border border-line rounded-[10px] bg-surface-strong text-text text-[0.9rem] focus:outline-2 focus:outline-accent focus:-outline-offset-1';
-  const btnPrimary = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-accent text-white hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
+  const btnPrimary = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-accent text-on-accent hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
   const btnOutline = 'cursor-pointer rounded-xl py-2.5 px-5 font-bold text-sm bg-transparent text-accent border border-accent hover:bg-glow disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
-  const btnDanger = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
+  const btnDanger = 'cursor-pointer border-none rounded-xl py-2.5 px-5 font-bold text-sm bg-danger text-on-accent hover:bg-danger-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150';
   const card = 'bg-surface border border-line rounded-[var(--radius-card)] p-4 sm:p-6 shadow-card';
   const labelCls = 'text-[0.78rem] font-bold text-muted uppercase tracking-wide';
   const statLabel = 'text-[0.72rem] font-bold text-muted uppercase tracking-wider';
@@ -455,10 +455,10 @@
       ? (balance0 * BigInt(pct)) / 100n
       : (balance1 * BigInt(pct)) / 100n;
     if (token === 0) {
-      inputAmount0 = formatTokenAmount(raw, currency0Decimals);
+      inputAmount0 = formatRawTokenAmount(raw, currency0Decimals);
       computeFromAmount0(raw);
     } else {
-      inputAmount1 = formatTokenAmount(raw, currency1Decimals);
+      inputAmount1 = formatRawTokenAmount(raw, currency1Decimals);
       computeFromAmount1(raw);
     }
   }
@@ -887,7 +887,7 @@
       <div class="relative inline-flex items-center">
         <input type="checkbox" bind:checked={advancedMode} class="sr-only peer" />
         <div class="w-9 h-5 bg-line rounded-full peer-checked:bg-accent transition-colors"></div>
-        <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+        <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-toggle-knob rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
       </div>
     </label>
   </div>
@@ -908,11 +908,11 @@
           <span
             class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors duration-150"
             class:bg-accent={active}
-            class:text-white={active}
+            class:text-on-accent={active}
             class:text-accent={done}
             class:bg-surface-strong={!active && !done}
             class:text-muted={!active && !done}
-            style={done ? 'background: rgba(23,107,82,0.15)' : ''}
+            class:bg-glow={done}
           >
             {done ? '\u2713' : num}
           </span>
@@ -1152,7 +1152,7 @@
           {#if poolState}
             <div class="flex flex-col gap-0.5">
               <span class={statLabel}>{usingReferenceTick ? 'Market Tick (approx.)' : 'Current Tick'}</span>
-              <span class="text-sm font-semibold font-mono">{effectiveTick} {#if usingReferenceTick} <span class="text-[0.68rem] text-yellow-400 font-normal">via canonical pool</span>{/if}</span>
+              <span class="text-sm font-semibold font-mono">{effectiveTick} {#if usingReferenceTick} <span class="text-[0.68rem] text-warning font-normal">via canonical pool</span>{/if}</span>
             </div>
             <div class="flex flex-col gap-0.5">
               <span class={statLabel}>1 {currency0Symbol || 'Token0'} =</span>
@@ -1176,18 +1176,18 @@
             <div class="flex items-center justify-between">
               <span class="font-bold text-text text-[0.9rem]">{currency0Symbol || 'Token0'} <span class="text-[0.72rem] text-muted font-normal">({currency0Decimals}d)</span></span>
               <span class="text-[0.72rem] text-muted">
-                Balance: {loadingBalances ? '\u2026' : formatTokenAmount(balance0, currency0Decimals)}
+                Balance: {loadingBalances ? '\u2026' : formatRawTokenAmount(balance0, currency0Decimals)}
               </span>
             </div>
             <input class={inputCls} type="text" bind:value={inputAmount0} on:input={onAmount0Input} placeholder="0.0" disabled={refAmount0 === 0n && refAmount1 > 0n} />
             {#if estimatedAmounts.totalAmount0 > 0n}
-              <span class="text-[0.72rem] text-muted">~{formatTokenAmount(estimatedAmounts.totalAmount0, currency0Decimals)} Required</span>
+              <span class="text-[0.72rem] text-muted">~{formatRawTokenAmount(estimatedAmounts.totalAmount0, currency0Decimals)} Required</span>
             {/if}
             {#if refAmount0 === 0n && refAmount1 > 0n}
               <span class="text-[0.72rem] text-muted italic">Not required for current grid range</span>
             {:else}
               {#if insufficientBalance0}
-                <span class="text-[0.72rem] font-semibold text-red-500">Insufficient balance (have {formatTokenAmount(balance0, currency0Decimals)})</span>
+                <span class="text-[0.72rem] font-semibold text-danger">Insufficient balance (have {formatRawTokenAmount(balance0, currency0Decimals)})</span>
               {/if}
               <div class="flex gap-2">
                 {#each [25, 50, 100] as pct}
@@ -1207,18 +1207,18 @@
             <div class="flex items-center justify-between">
               <span class="font-bold text-text text-[0.9rem]">{currency1Symbol || 'Token1'} <span class="text-[0.72rem] text-muted font-normal">({currency1Decimals}d)</span></span>
               <span class="text-[0.72rem] text-muted">
-                Balance: {loadingBalances ? '\u2026' : formatTokenAmount(balance1, currency1Decimals)}
+                Balance: {loadingBalances ? '\u2026' : formatRawTokenAmount(balance1, currency1Decimals)}
               </span>
             </div>
             <input class={inputCls} type="text" bind:value={inputAmount1} on:input={onAmount1Input} placeholder="0.0" disabled={refAmount1 === 0n && refAmount0 > 0n} />
             {#if estimatedAmounts.totalAmount1 > 0n}
-              <span class="text-[0.72rem] text-muted">~{formatTokenAmount(estimatedAmounts.totalAmount1, currency1Decimals)} Required</span>
+              <span class="text-[0.72rem] text-muted">~{formatRawTokenAmount(estimatedAmounts.totalAmount1, currency1Decimals)} Required</span>
             {/if}
             {#if refAmount1 === 0n && refAmount0 > 0n}
               <span class="text-[0.72rem] text-muted italic">Not required for current grid range</span>
             {:else}
               {#if insufficientBalance1}
-                <span class="text-[0.72rem] font-semibold text-red-500">Insufficient balance (have {formatTokenAmount(balance1, currency1Decimals)})</span>
+                <span class="text-[0.72rem] font-semibold text-danger">Insufficient balance (have {formatRawTokenAmount(balance1, currency1Decimals)})</span>
               {/if}
               <div class="flex gap-2">
                 {#each [25, 50, 100] as pct}
@@ -1287,8 +1287,8 @@
             />
           </div>
           {#if zeroOrderCount > 0}
-            <div class="mt-3 flex items-start gap-2 rounded-lg border border-yellow-500 bg-yellow-400 px-4 py-3 text-[0.85rem] text-black font-semibold">
-              <span class="mt-0.5 text-yellow-400">&#9888;</span>
+            <div class="mt-3 flex items-start gap-2 rounded-lg border border-warning bg-warning/20 px-4 py-3 text-[0.85rem] text-warning-strong font-semibold">
+              <span class="mt-0.5 text-warning">&#9888;</span>
               <span>
                 <strong>{zeroOrderCount}</strong> of {previewedOrders.length} orders will be empty due to rounding
                 (only <strong>{activeOrderCount}</strong> active).
@@ -1365,7 +1365,7 @@
             </div>
           {/if}
           {#if hasAmountMismatchWarning}
-            <div class="mt-3 rounded-lg border border-yellow-500 bg-yellow-400 px-3 py-2 text-[0.8rem] text-black font-semibold">
+            <div class="mt-3 rounded-lg border border-warning bg-warning/20 px-3 py-2 text-[0.8rem] text-warning-strong font-semibold">
               Amount mismatch detected (&gt; 1%):
               {#if mismatch0Bps > AMOUNT_MISMATCH_WARN_BPS}
                 {currency0Symbol || 'Token0'} {Number(mismatch0Bps) / 100}%
@@ -1382,7 +1382,7 @@
         </div>
 
         {#if deploying && deployStepLabel}
-          <div class="flex items-center gap-3 mb-4 p-3 rounded-xl border border-accent/20" style="background: rgba(23,107,82,0.05)">
+          <div class="flex items-center gap-3 mb-4 p-3 rounded-xl border border-accent/20 bg-glow/30">
             <div class="animate-spin w-5 h-5 border-2 border-accent border-t-transparent rounded-full flex-shrink-0"></div>
             <span class="text-sm font-medium text-text">{deployStepLabel}</span>
           </div>
