@@ -12,6 +12,7 @@
     getTokenBalance,
   } from '$lib/contracts/permit2';
   import { getPresetsForChain, isNativeToken, type PoolPreset } from '$lib/contracts/poolPresets';
+  import { getStoredPositions } from '$lib/contracts/customPositions';
   import { formatTokenAmount, formatRawTokenAmount, formatSmallDecimal, parseTokenAmount, getSqrtPriceAtTick, tickToPrice } from '$lib/contracts/tickMath';
   import { SLIPPAGE_OPTIONS } from '$lib/contracts/gridUiShared';
   import { executeSwap, estimateSwapOutput, poolFeeToBps } from '$lib/contracts/swapRouter';
@@ -26,7 +27,9 @@
   // ── Reactive state ──
   $: hookAddress = getGridHookAddress($chainIdStore);
   $: routerAddress = getSwapRouterAddress($chainIdStore);
-  $: presets = getPresetsForChain($chainIdStore ?? 0);
+  $: builtInPresets = getPresetsForChain($chainIdStore ?? 0);
+  $: customPools = getStoredPositions($chainIdStore, $signerAddress);
+  $: presets = deduplicatePools(builtInPresets, customPools);
   $: hasRouter = routerAddress !== '0x0000000000000000000000000000000000000000';
 
   let selectedPresetIdx = -1;
@@ -47,6 +50,13 @@
   let inputBalance = 0n;
   let balanceLoaded = false;
 
+  function deduplicatePools(base: PoolPreset[], custom: PoolPreset[]): PoolPreset[] {
+    const seen = new Set(base.map(p => `${p.currency0.toLowerCase()}-${p.currency1.toLowerCase()}-${p.fee}-${p.tickSpacing}`));
+    const unique = custom.filter(p => !seen.has(`${p.currency0.toLowerCase()}-${p.currency1.toLowerCase()}-${p.fee}-${p.tickSpacing}`));
+    return [...base, ...unique];
+  }
+
+  $: presetDivider = builtInPresets.length;
   $: selectedPreset = selectedPresetIdx >= 0 ? presets[selectedPresetIdx] : null;
 
   $: inputSymbol = selectedPreset
@@ -277,6 +287,10 @@
     <p class={labelCls + ' mb-3'}>Pool</p>
     <div class="flex flex-wrap gap-2">
       {#each presets as preset, i}
+        {#if i === presetDivider && presetDivider > 0 && presets.length > presetDivider}
+          <div class="w-full border-t border-line my-1"></div>
+          <p class="w-full text-[0.68rem] text-muted font-semibold uppercase tracking-wide">Your pools</p>
+        {/if}
         <button
           class="cursor-pointer text-xs font-semibold py-1.5 px-3 rounded-full border transition-colors duration-150
             {selectedPresetIdx === i
@@ -288,7 +302,7 @@
             <TokenIcon symbol={preset.currency0Symbol} size={14} />
             <TokenIcon symbol={preset.currency1Symbol} size={14} />
             {preset.label}
-            <span class="text-[0.65rem] text-muted">({preset.fee / 10000}%)</span>
+            <span class="text-[0.65rem] text-muted">({(preset.fee / 10000).toFixed(4)}%)</span>
           </span>
         </button>
       {/each}
@@ -324,7 +338,7 @@
         </div>
         <div class="flex justify-between">
           <span class="text-muted">Fee</span>
-          <span class="font-mono">{selectedPreset.fee / 10000}%</span>
+          <span class="font-mono">{(selectedPreset.fee / 10000).toFixed(4)}%</span>
         </div>
         <div class="flex justify-between">
           <span class="text-muted">Hook</span>

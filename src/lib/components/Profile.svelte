@@ -603,14 +603,14 @@
                 <span class="text-sm font-semibold font-mono">{pos.poolState.swapCount}</span>
               </div>
               {#if pos.apr != null}
-                <div class="flex flex-col gap-0.5">
+                <div class="flex flex-col gap-0.5" title="APR = (fees ÷ capital) × (365d ÷ elapsed) × 100&#10;Both fees and capital are converted to token1 using the current tick price.">
                   <span class={statLabel}>APR</span>
                   <span class="text-sm font-extrabold font-mono text-success">{pos.apr.toFixed(2)}%</span>
                 </div>
               {/if}
             </div>
             <div class="mt-3 pt-3 border-t border-line flex items-center justify-between">
-              <span class="text-[0.72rem] text-muted">Fee: {(pos.preset.fee / 10000).toFixed(2)}%</span>
+              <span class="text-[0.72rem] text-muted">Fee: {(pos.preset.fee / 10000).toFixed(4)}%</span>
               <span class="text-[0.75rem] text-accent font-bold">Manage &rarr;</span>
             </div>
           </button>
@@ -625,17 +625,17 @@
 
     <!-- Pool header -->
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <h2 class="text-[1.3rem] font-extrabold inline-flex items-center gap-1.5">
-        <TokenIcon symbol={currency0Symbol} size={22} />
-        <TokenIcon symbol={currency1Symbol} size={22} />
-        {tokenLabel(currency0Symbol, currency0)} / {tokenLabel(currency1Symbol, currency1)} Grid
-      </h2>
-      <button
+    <button
         class="text-[0.8rem] text-accent hover:underline bg-transparent border-none cursor-pointer"
         on:click={goBackToPositions}
       >
         &larr; {deployedPositions.length > 0 ? 'Your Grids' : 'Change Pool'}
       </button>
+      <h2 class="text-[1.3rem] font-extrabold inline-flex items-center gap-1.5">
+        <TokenIcon symbol={currency0Symbol} size={22} />
+        <TokenIcon symbol={currency1Symbol} size={22} />
+        {tokenLabel(currency0Symbol, currency0)} / {tokenLabel(currency1Symbol, currency1)}
+      </h2>
     </div>
 
     <!-- Status cards -->
@@ -746,7 +746,7 @@
           </div>
         {/if}
         {#if aprData}
-          <div class="flex flex-col gap-0.5">
+          <div class="flex flex-col gap-0.5" title="APR = (fees ÷ capital) × (365d ÷ elapsed) × 100&#10;Both fees and capital are converted to {currency1Symbol || 'Token1'} using the current tick price.">
             <span class={statLabel}>APR</span>
             <span class="text-base font-extrabold font-mono text-success">{aprData.apr.toFixed(2)}%</span>
           </div>
