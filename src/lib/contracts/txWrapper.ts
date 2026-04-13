@@ -2,20 +2,32 @@ import type { waitForTransactionReceipt } from '@wagmi/core';
 import { getConnection, switchChain } from '@wagmi/core';
 import { config } from '$lib/wagmi/client';
 import { supportedChains } from '$lib/wagmi/config';
+import { isSupported } from '$lib/contracts/config';
 import { addToast, updateToast } from '$lib/stores/toasts';
 import type { Hash } from 'viem';
 
 const DEFAULT_CHAIN_ID = supportedChains[0].id;
 
 /**
- * Ensures the wallet is on the expected chain; prompts a switch if not.
- * Defaults to the first supported chain when no chainId is provided.
+ * Ensures the wallet is on a supported chain.
+ *
+ * - If `expectedChainId` is given, switches to that exact chain.
+ * - Otherwise, keeps the current chain when it is supported.
+ * - Falls back to the first supported chain when the current chain is unsupported.
  */
-export async function ensureChain(expectedChainId: number = DEFAULT_CHAIN_ID): Promise<void> {
-  const connection = getConnection(config)
+export async function ensureChain(expectedChainId?: number): Promise<void> {
+  const connection = getConnection(config);
   const current = connection?.chainId;
-  if (current === expectedChainId) return;
-  await switchChain(config, { chainId: expectedChainId });
+
+  if (expectedChainId != null) {
+    if (current === expectedChainId) return;
+    await switchChain(config, { chainId: expectedChainId });
+    return;
+  }
+
+  // No explicit chain requested — stay on current if it's supported
+  if (current != null && isSupported(current)) return;
+  await switchChain(config, { chainId: DEFAULT_CHAIN_ID });
 }
 
 export interface TxResult {
