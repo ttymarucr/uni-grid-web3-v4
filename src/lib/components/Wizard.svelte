@@ -192,9 +192,12 @@
     if (selectedPresetIdx >= 0) return; // already a known preset
     const user = $signerAddress;
     if (!user || !currency0 || !currency1) return;
+    const a = currency0.toLowerCase();
+    const b = currency1.toLowerCase();
+    const sorted = a < b;
     savePosition($chainIdStore ?? 0, user, {
-      currency0: currency0 as Address,
-      currency1: currency1 as Address,
+      currency0: (sorted ? currency0 : currency1) as Address,
+      currency1: (sorted ? currency1 : currency0) as Address,
       currency0Symbol,
       currency1Symbol,
       currency0Decimals,

@@ -79,9 +79,12 @@ export function buildPoolKey(params: {
   tickSpacing: number;
   hookAddress: Address;
 }): PoolKey {
+  const a = params.currency0.toLowerCase();
+  const b = params.currency1.toLowerCase();
+  const sorted = a < b;
   return {
-    currency0: params.currency0 as Address,
-    currency1: params.currency1 as Address,
+    currency0: (sorted ? params.currency0 : params.currency1) as Address,
+    currency1: (sorted ? params.currency1 : params.currency0) as Address,
     fee: params.fee,
     tickSpacing: params.tickSpacing,
     hooks: params.hookAddress,
