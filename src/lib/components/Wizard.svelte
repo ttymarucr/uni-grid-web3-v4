@@ -201,10 +201,10 @@
     savePosition($chainIdStore ?? 0, user, {
       currency0: (sorted ? currency0 : currency1) as Address,
       currency1: (sorted ? currency1 : currency0) as Address,
-      currency0Symbol,
-      currency1Symbol,
-      currency0Decimals,
-      currency1Decimals,
+      currency0Symbol: (sorted ? currency0Symbol : currency1Symbol),
+      currency1Symbol: (sorted ? currency1Symbol : currency0Symbol),
+      currency0Decimals: (sorted ? currency0Decimals : currency1Decimals),
+      currency1Decimals: (sorted ? currency1Decimals : currency0Decimals),
       fee,
       tickSpacing,
     });
