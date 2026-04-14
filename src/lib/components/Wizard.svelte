@@ -1,7 +1,7 @@
 <script lang="ts">
   import { connected, signerAddress, chainId as chainIdStore } from '$lib/stores/wallet';
-  import { getGridHookAddress } from '$lib/contracts/config';
-  import { executeTransaction, ensureChain } from '$lib/contracts/txWrapper';
+  import { getGridHookAddress, PERMIT2_ADDRESS } from '$lib/contracts/config';
+  import { executeTransaction, ensureChain, executeBatchTransaction, walletSupportsBatching, type BatchCall } from '$lib/contracts/txWrapper';
   import { addToast } from '$lib/stores/toasts';
   import {
     getGridConfig,
@@ -12,6 +12,8 @@
     isGridConfigEqual,
     getPoolManagerAddress,
     initializePool,
+    gridHookAbi,
+    POOL_MANAGER_INITIALIZE_ABI,
     type PoolKey,
     type GridConfig,
     type PoolState,
@@ -23,6 +25,7 @@
     getTokenAllowanceForPermit2,
     grantPermit2Allowance,
     getPermit2Allowance,
+    erc20ApproveAbi,
   } from '$lib/contracts/permit2';
   import {
     WIZARD_STEPS,
@@ -361,7 +364,14 @@
   let deploying = false;
   let deployStepLabel = '';
   let deadlineMinutes = 5;
+  let batchMode = false;
+  let walletCanBatch = false;
   const AMOUNT_MISMATCH_WARN_BPS = 100n; // 1%
+
+  // Detect AA batching support when wallet connects
+  $: if ($connected) {
+    walletSupportsBatching().then((v) => (walletCanBatch = v));
+  }
 
   const MAX_UINT160 = (1n << 160n) - 1n;
   const permit2Expiration = () => Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
@@ -786,6 +796,119 @@
           nativeValue,
         ),
       );
+
+      addToast('success', 'Grid deployed successfully!');
+      savePositionIfCustom();
+      await fetchPoolData();
+      push('/profile');
+    } catch (e: any) {
+      addToast('error', `Deploy failed: ${e.shortMessage || e.message}`);
+      wizardStep = 3;
+    } finally {
+      deploying = false;
+      deployStepLabel = '';
+      intentionalSwitch = false;
+    }
+  }
+
+  async function handleBatchDeploy() {
+    const user = $signerAddress as Address;
+    if (!user) return;
+    if (!areTokenDecimalsReady()) {
+      addToast('error', 'Token decimals are not resolved. Please go back and verify pool tokens.');
+      wizardStep = 1;
+      return;
+    }
+    deploying = true;
+    intentionalSwitch = true;
+    deployStepLabel = 'Preparing batched transaction\u2026';
+    try {
+      await ensureChain();
+
+      const key = buildPoolKey();
+      const calls: BatchCall[] = [];
+      const permit2ApproveAbi = [{
+        type: 'function' as const,
+        name: 'approve',
+        inputs: [
+          { name: 'token', type: 'address' },
+          { name: 'spender', type: 'address' },
+          { name: 'amount', type: 'uint160' },
+          { name: 'expiration', type: 'uint48' },
+        ],
+        outputs: [],
+        stateMutability: 'nonpayable' as const,
+      }];
+
+      // 0. Pool init (if needed)
+      if (needsPoolInit) {
+        const sqrtPrice = getSqrtPriceAtTick(effectiveTick);
+        const poolMgr = await getPoolManagerAddress(hookAddress);
+        calls.push({
+          to: poolMgr,
+          abi: POOL_MANAGER_INITIALIZE_ABI,
+          functionName: 'initialize',
+          args: [key, sqrtPrice],
+        });
+      }
+
+      // 1. Set grid config (if changed)
+      const desiredConfig = buildDesiredGridConfig();
+      const onChainConfig = await getGridConfig(hookAddress, key, user);
+      if (!isGridConfigEqual(desiredConfig, onChainConfig)) {
+        calls.push({
+          to: hookAddress,
+          abi: gridHookAbi as readonly any[],
+          functionName: 'setGridConfig',
+          args: [key, desiredConfig],
+        });
+      }
+
+      // 2. Token approvals (skip native)
+      const tokens = [
+        { addr: currency0, label: tokenLabel(currency0Symbol, currency0) },
+        { addr: currency1, label: tokenLabel(currency1Symbol, currency1) },
+      ];
+      for (const tok of tokens) {
+        if (isNativeCurrency(tok.addr)) continue;
+
+        const erc20 = await getTokenAllowanceForPermit2(tok.addr as Address, user);
+        if (erc20 < MAX_UINT160 / 2n) {
+          calls.push({
+            to: tok.addr as Address,
+            abi: erc20ApproveAbi,
+            functionName: 'approve',
+            args: [PERMIT2_ADDRESS, MAX_UINT160],
+          });
+        }
+
+        const p2 = await getPermit2Allowance(user, tok.addr as Address, hookAddress);
+        if (p2.amount < MAX_UINT160 / 2n) {
+          calls.push({
+            to: PERMIT2_ADDRESS,
+            abi: permit2ApproveAbi,
+            functionName: 'approve',
+            args: [tok.addr, hookAddress, MAX_UINT160, permit2Expiration()],
+          });
+        }
+      }
+
+      // 3. Deploy grid
+      const bps0 = BigInt(deployMaxDelta0 || '0');
+      const bps1 = BigInt(deployMaxDelta1 || '0');
+      const maxD0 = bps0 === 0n ? 0n : estimatedAmounts.totalAmount0 * bps0 / 10000n;
+      const maxD1 = bps1 === 0n ? 0n : estimatedAmounts.totalAmount1 * bps1 / 10000n;
+      const nativeValue = getNativeDeployValue(maxD0, maxD1);
+      calls.push({
+        to: hookAddress,
+        abi: gridHookAbi as readonly any[],
+        functionName: 'deployGrid',
+        args: [key, BigInt(deployLiquidity), maxD0, maxD1, getDeadline(deadlineMinutes)],
+        value: nativeValue,
+      });
+
+      deployStepLabel = `Sending ${calls.length} calls as a single batch\u2026`;
+      await executeBatchTransaction('Deploy Grid', calls);
 
       addToast('success', 'Grid deployed successfully!');
       savePositionIfCustom();
@@ -1391,10 +1514,23 @@
           </div>
         {/if}
 
+        {#if walletCanBatch}
+          <label class="flex items-center gap-2 mb-4 cursor-pointer select-none">
+            <input
+              class="w-[1.1rem] h-[1.1rem] accent-[var(--color-accent)]"
+              type="checkbox"
+              bind:checked={batchMode}
+              disabled={deploying}
+            />
+            <span class="text-sm font-semibold text-text">Batch all transactions in a single call</span>
+            <span class="text-[0.72rem] text-muted">(AA wallet detected)</span>
+          </label>
+        {/if}
+
         <div class="flex gap-3">
           <button class={btnOutline} on:click={() => (wizardStep = 3)} disabled={deploying}>Back</button>
-          <button class={btnPrimary} on:click={handleUnifiedDeploy} disabled={deploying || !$connected}>
-            {deploying ? 'Deploying\u2026' : 'Deploy Grid'}
+          <button class={btnPrimary} on:click={batchMode ? handleBatchDeploy : handleUnifiedDeploy} disabled={deploying || !$connected}>
+            {deploying ? 'Deploying\u2026' : batchMode ? 'Deploy Grid (Batched)' : 'Deploy Grid'}
           </button>
         </div>
       </section>

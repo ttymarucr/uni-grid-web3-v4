@@ -1,6 +1,7 @@
 import { readContract, writeContract, waitForTransactionReceipt } from '@wagmi/core';
 import { config } from '$lib/wagmi/client';
-import gridHookAbi from './abi/GridHook.json';
+import gridHookAbi_ from './abi/GridHook.json';
+export const gridHookAbi = gridHookAbi_;
 import type { Address } from 'viem';
 
 function cfg() {
@@ -79,7 +80,7 @@ function computeFees(d: OrderFeeData): OrderFees {
   };
 }
 
-const abi = gridHookAbi as readonly any[];
+const abi = gridHookAbi_ as readonly any[];
 
 // ── Read functions ──
 
@@ -362,7 +363,7 @@ export async function getPoolManagerSlot0(
 
 // ── PoolManager interaction ──
 
-const POOL_MANAGER_INITIALIZE_ABI = [
+export const POOL_MANAGER_INITIALIZE_ABI = [
   {
     type: 'function',
     name: 'initialize',

@@ -1,10 +1,10 @@
 import type { waitForTransactionReceipt } from '@wagmi/core';
-import { getConnection, switchChain } from '@wagmi/core';
+import { getConnection, switchChain, sendCalls, getCallsStatus, getCapabilities } from '@wagmi/core';
 import { config } from '$lib/wagmi/client';
 import { supportedChains } from '$lib/wagmi/config';
 import { isSupported } from '$lib/contracts/config';
 import { addToast, updateToast } from '$lib/stores/toasts';
-import type { Hash } from 'viem';
+import type { Address, Hash } from 'viem';
 
 const DEFAULT_CHAIN_ID = supportedChains[0].id;
 
@@ -89,4 +89,68 @@ function parseError(err: any): string {
     return 'wrong network — please switch to a supported chain';
   }
   return err?.shortMessage || err?.message || 'unknown error';
+}
+
+// ── EIP-5792 batched calls (AA wallets) ──
+
+export interface BatchCall {
+  to: Address;
+  abi: readonly any[];
+  functionName: string;
+  args: readonly any[];
+  value?: bigint;
+}
+
+/** Check if the connected wallet supports EIP-5792 atomic batched calls. */
+export async function walletSupportsBatching(): Promise<boolean> {
+  try {
+    const caps = await getCapabilities(config);
+    return Object.values(caps).some(
+      (c: any) => c.atomicBatch?.supported || c.atomic?.supported,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send multiple contract calls as a single EIP-5792 batch and poll until confirmed.
+ */
+export async function executeBatchTransaction(
+  label: string,
+  calls: BatchCall[],
+): Promise<void> {
+  await ensureChain();
+  const toastId = addToast('pending', `${label}: sending batched transaction…`);
+
+  try {
+    const formattedCalls = calls.map((c) => ({
+      to: c.to,
+      abi: c.abi,
+      functionName: c.functionName,
+      args: c.args,
+      ...(c.value != null && c.value > 0n ? { value: c.value } : {}),
+    }));
+
+    const { id } = await sendCalls(config, { calls: formattedCalls } as any);
+
+    updateToast(toastId, { message: `${label}: waiting for confirmation…` });
+
+    // Poll until terminal status
+    let status: Awaited<ReturnType<typeof getCallsStatus>>;
+    do {
+      await new Promise((r) => setTimeout(r, 2000));
+      status = await getCallsStatus(config, { id });
+    } while (status.status === 'pending');
+    if (status.status === 'success') {
+      updateToast(toastId, { type: 'success', message: `${label}: confirmed!` });
+    } else {
+      updateToast(toastId, { type: 'error', message: `${label}: batch reverted` });
+      throw new Error('Batch transaction reverted');
+    }
+  } catch (err: any) {
+    const msg = parseError(err);
+    updateToast(toastId, { type: 'error', message: `${label}: ${msg}` });
+    throw err;
+  }
 }

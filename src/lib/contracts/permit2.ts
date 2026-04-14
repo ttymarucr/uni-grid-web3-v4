@@ -8,7 +8,7 @@ function cfg() {
   return config;
 }
 
-const erc20ApproveAbi = [
+export const erc20ApproveAbi = [
   {
     type: 'function',
     name: 'approve',
