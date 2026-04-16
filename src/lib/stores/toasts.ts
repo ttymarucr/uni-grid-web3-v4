@@ -10,7 +10,7 @@ export interface Toast {
 }
 
 let nextId = 1;
-const AUTO_DISMISS_MS = 5000;
+const AUTO_DISMISS_MS = 10_000;
 
 export const toasts = writable<Toast[]>([]);
 
@@ -18,7 +18,7 @@ export function addToast(type: ToastType, message: string, txHash?: string): num
   const id = nextId++;
   toasts.update((t) => [...t, { id, type, message, txHash }]);
 
-  if (type === 'success' || type === 'info') {
+  if (type !== "pending") {
     setTimeout(() => removeToast(id), AUTO_DISMISS_MS);
   }
 
@@ -30,7 +30,7 @@ export function updateToast(id: number, updates: Partial<Omit<Toast, 'id'>>) {
     t.map((toast) => (toast.id === id ? { ...toast, ...updates } : toast))
   );
 
-  if (updates.type === 'success' || updates.type === 'info') {
+  if (updates.type !== "pending") {
     setTimeout(() => removeToast(id), AUTO_DISMISS_MS);
   }
 }
