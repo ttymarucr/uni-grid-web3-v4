@@ -244,6 +244,13 @@
     });
   }
 
+  // Reactive display prices for the bottom labels — explicitly reference invertPrice
+  // so Svelte tracks it (toDisplayPrice reads it internally but $: can't see that).
+  // @ts-ignore: Svelte reactivity confuses TypeScript here.
+  $: currentDisplayPrice = (invertPrice, currentTick != null ? formatPrice(toDisplayPrice(currentTick)) : '');
+  // @ts-ignore: Svelte reactivity confuses TypeScript here.
+  $: centerDisplayPrice = (invertPrice, centerTick != null ? formatPrice(toDisplayPrice(centerTick)) : '');
+
   function togglePrice() {
     invertPrice = !invertPrice;
     buildChart();
@@ -293,7 +300,7 @@
       {#if currentTick != null}
         <span class="flex items-center gap-1">
           <span class="inline-block w-3 h-0.5 bg-danger"></span>
-          <span class="text-muted">Current Price: <span class="font-mono font-semibold">{formatPrice(toDisplayPrice(currentTick))}</span>
+          <span class="text-muted">Current Price: <span class="font-mono font-semibold">{currentDisplayPrice}</span>
             {#if priceLabel !== 'Price'}<span class="text-[0.62rem]"> {priceLabel}</span>{/if}
           </span>
         </span>
@@ -301,7 +308,7 @@
       {#if centerTick != null}
         <span class="flex items-center gap-1">
           <span class="inline-block w-3 h-0.5 bg-accent-strong"></span>
-          <span class="text-muted">Grid Center: <span class="font-mono font-semibold">{formatPrice(toDisplayPrice(centerTick))}</span></span>
+          <span class="text-muted">Grid Center: <span class="font-mono font-semibold">{centerDisplayPrice}</span></span>
         </span>
       {/if}
     </div>
