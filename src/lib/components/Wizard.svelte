@@ -251,6 +251,8 @@
     gridOrders = reset.gridOrders;
     plannedWeights = reset.plannedWeights;
     referenceTick = reset.referenceTick;
+    customTick = null;
+    editingTick = false;
     view = 'wizard';
     wizardStep = reset.wizardStep;
     cfgRebalanceBpsCustom = false;
@@ -319,8 +321,40 @@
 
   // ── Reference tick (from PoolManager when grid pool not initialized) ──
   let referenceTick: number | null = null;
+  let customTick: number | null = null;
+  let editingTick = false;
   $: usingReferenceTick = poolState != null && !poolState.initialized && referenceTick != null;
-  $: effectiveTick = poolState ? (poolState.initialized ? poolState.currentTick : (referenceTick ?? 0)) : 0;
+  $: effectiveTick = customTick != null ? customTick : poolState ? (poolState.initialized ? poolState.currentTick : (referenceTick ?? 0)) : 0;
+
+  function handleTickDblClick() {
+    if (!advancedMode) return;
+    editingTick = true;
+  }
+
+  function commitCustomTick(value: string) {
+    const parsed = parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      customTick = parsed;
+    }
+    editingTick = false;
+  }
+
+  function handleTickInputKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      commitCustomTick((e.target as HTMLInputElement).value);
+    } else if (e.key === 'Escape') {
+      editingTick = false;
+    }
+  }
+
+  function handleTickInputBlur(e: FocusEvent) {
+    commitCustomTick((e.target as HTMLInputElement).value);
+  }
+
+  function clearCustomTick() {
+    customTick = null;
+    editingTick = false;
+  }
 
   // Price of token1 per token0 (adjusted for decimals)
   $: priceToken1PerToken0 = tickToPrice(effectiveTick) * Math.pow(10, currency0Decimals - currency1Decimals);
@@ -701,16 +735,8 @@
     ? getTokenAmountsForOrders(gridOrders, effectiveTick)
     : { totalAmount0: 0n, totalAmount1: 0n };
 
-  function orderAmounts(order: GridOrder, currentTick: number): { amount0: bigint; amount1: bigint } {
-    if (order.liquidity === 0n) return { amount0: 0n, amount1: 0n };
-    const sqrtPriceX96 = getSqrtPriceAtTick(currentTick);
-    const sqrtPriceAX96 = getSqrtPriceAtTick(order.tickLower);
-    const sqrtPriceBX96 = getSqrtPriceAtTick(order.tickUpper);
-    return getAmountsForLiquidity(sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, order.liquidity);
-  }
-
   // ── Pool needs initialization? ──
-  $: needsPoolInit = poolState != null && !poolState.initialized;
+  $: needsPoolInit = (poolState != null && !poolState.initialized) || customTick != null;
 
   // ── Unified deploy flow ──
   function buildDesiredGridConfig(): GridConfig {
@@ -740,7 +766,7 @@
     try {
       // 0. Initialize pool in PoolManager (if not yet initialized)
       if (needsPoolInit) {
-        deployStepLabel = 'Initializing pool in PoolManager\u2026';
+        deployStepLabel = 'Initializing pool in PoolManager';
         const sqrtPrice = getSqrtPriceAtTick(effectiveTick);
         const poolMgr = await getPoolManagerAddress(hookAddress);
         await executeTransaction('Initialize Pool', () =>
@@ -752,14 +778,14 @@
       }
 
       // 1. Set grid config
-      deployStepLabel = 'Checking grid configuration\u2026';
+      deployStepLabel = 'Checking grid configuration';
       const key = buildPoolKey();
       const desiredConfig = buildDesiredGridConfig();
       const onChainConfig = await getGridConfig(hookAddress, key, user);
       if (isGridConfigEqual(desiredConfig, onChainConfig)) {
         addToast('info', 'Grid configuration unchanged, skipping Set Config transaction');
       } else {
-        deployStepLabel = 'Setting grid configuration\u2026';
+        deployStepLabel = 'Setting grid configuration';
         await executeTransaction('Set Grid Config', () =>
           writeSetGridConfig(hookAddress, key, desiredConfig),
         );
@@ -773,10 +799,10 @@
       for (const tok of tokens) {
         if (isNativeCurrency(tok.addr)) continue;
 
-        deployStepLabel = `Checking ${tok.label} allowance\u2026`;
+        deployStepLabel = `Checking ${tok.label} allowance`;
         const erc20 = await getTokenAllowanceForPermit2(tok.addr as Address, user);
         if (erc20 < MAX_UINT160 / 2n) {
-          deployStepLabel = `Approving ${tok.label} for Permit2\u2026`;
+          deployStepLabel = `Approving ${tok.label} for Permit2`;
           await executeTransaction(`Approve ${tok.label}`, () =>
             approveTokenForPermit2(tok.addr as Address, MAX_UINT160),
           );
@@ -784,7 +810,7 @@
 
         const p2 = await getPermit2Allowance(user, tok.addr as Address, hookAddress);
         if (p2.amount < MAX_UINT160 / 2n) {
-          deployStepLabel = `Granting ${tok.label} hook allowance\u2026`;
+          deployStepLabel = `Granting ${tok.label} hook allowance`;
           await executeTransaction(`Grant ${tok.label} Allowance`, () =>
             grantPermit2Allowance(tok.addr as Address, hookAddress, MAX_UINT160, permit2Expiration()),
           );
@@ -792,7 +818,7 @@
       }
 
       // 3. Deploy grid
-      deployStepLabel = 'Deploying grid\u2026';
+      deployStepLabel = 'Deploying grid';
       const bps0 = BigInt(deployMaxDelta0 || '0');
       const bps1 = BigInt(deployMaxDelta1 || '0');
       const maxD0 = bps0 === 0n ? 0n : estimatedAmounts.totalAmount0 * bps0 / 10000n;
@@ -834,7 +860,7 @@
     }
     deploying = true;
     intentionalSwitch = true;
-    deployStepLabel = 'Preparing batched transaction\u2026';
+    deployStepLabel = 'Preparing batched transaction';
     try {
       await ensureChain();
 
@@ -920,7 +946,7 @@
         value: nativeValue,
       });
 
-      deployStepLabel = `Sending ${calls.length} calls as a single batch\u2026`;
+      deployStepLabel = `Sending ${calls.length} calls as a single batch`;
       await executeBatchTransaction('Deploy Grid', calls);
 
       addToast('success', 'Grid deployed successfully!');
@@ -1095,11 +1121,11 @@
           <div class="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 mb-4 mt-2">
             <label class="flex flex-col gap-1">
               <span class={labelCls}>Currency 0</span>
-              <input class={inputCls} type="text" bind:value={currency0} placeholder="0x\u2026" />
+              <input class={inputCls} type="text" bind:value={currency0} placeholder="0x" />
             </label>
             <label class="flex flex-col gap-1">
               <span class={labelCls}>Currency 1</span>
-              <input class={inputCls} type="text" bind:value={currency1} placeholder="0x\u2026" />
+              <input class={inputCls} type="text" bind:value={currency1} placeholder="0x" />
             </label>
             <label class="flex flex-col gap-1">
               <span class={labelCls}>Fee</span>
@@ -1133,7 +1159,7 @@
         {/if}
 
         <button class={btnPrimary} on:click={handlePoolNext} disabled={loadingData || !currency0 || !currency1}>
-          {loadingData ? 'Loading\u2026' : 'Continue'}
+          {loadingData ? 'Loading' : 'Continue'}
         </button>
       </section>
     {/if}
@@ -1180,7 +1206,7 @@
 
         <!-- Custom config form -->
         {#if (selectedStrategyIdx >= 0 && STRATEGY_PRESETS[selectedStrategyIdx]?.isCustom) || advancedMode}
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4 mb-4 p-4 border border-line rounded-xl">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 p-4 border border-line rounded-xl">
             <label class="flex flex-col gap-1">
               <span class={labelCls}>Grid Spacing</span>
               <input
@@ -1197,10 +1223,6 @@
             <label class="flex flex-col gap-1">
               <span class={labelCls}>Max Orders</span>
               <input class={inputCls} type="number" bind:value={cfgMaxOrders} min="1" max="500" />
-            </label>
-            <label class="flex flex-col gap-1">
-              <span class={labelCls}>Rebalance Threshold ({(cfgRebalanceBps / 100).toFixed(2)}%)</span>
-              <input class={inputCls} type="number" bind:value={cfgRebalanceBps} min="0" />
             </label>
             <label class="flex flex-col gap-1">
               <span class={labelCls}>Distribution Type</span>
@@ -1294,8 +1316,33 @@
           </div>
           {#if poolState}
             <div class="flex flex-col gap-0.5">
-              <span class={statLabel}>{usingReferenceTick ? 'Market Tick (approx.)' : 'Current Tick'}</span>
-              <span class="text-sm font-semibold font-mono">{effectiveTick} {#if usingReferenceTick} <span class="text-[0.68rem] text-warning font-normal">via canonical pool</span>{/if}</span>
+              <span class={statLabel}>{customTick != null ? 'Custom Tick' : usingReferenceTick ? 'Market Tick (approx.)' : 'Current Tick'}</span>
+              {#if editingTick}
+                <input
+                  type="number"
+                  class="{inputCls} w-32 text-sm font-semibold font-mono"
+                  value={effectiveTick}
+                  on:keydown={handleTickInputKeydown}
+                  on:blur={handleTickInputBlur}
+                />
+              {:else}
+                <span
+                  class="text-sm font-semibold font-mono inline-flex items-center gap-1.5"
+                  class:cursor-pointer={advancedMode}
+                  title={advancedMode ? 'Double-click to set custom tick' : ''}
+                  on:dblclick={handleTickDblClick}
+                  role="textbox"
+                  tabindex="0"
+                >
+                  {effectiveTick}
+                  {#if customTick != null}
+                    <span class="text-[0.68rem] text-accent font-normal">(custom)</span>
+                    <button class="text-[0.68rem] text-muted hover:text-danger bg-transparent border-none cursor-pointer p-0" on:click={clearCustomTick} title="Reset to auto-detected tick">&times;</button>
+                  {:else if usingReferenceTick}
+                    <span class="text-[0.68rem] text-warning font-normal">via canonical pool</span>
+                  {/if}
+                </span>
+              {/if}
             </div>
             <div class="flex flex-col gap-0.5">
               <span class={statLabel}>1 {currency0Symbol || 'Token0'} =</span>
@@ -1319,7 +1366,7 @@
             <div class="flex items-center justify-between">
               <span class="font-bold text-text text-[0.9rem]">{currency0Symbol || 'Token0'} <span class="text-[0.72rem] text-muted font-normal">({currency0Decimals}d)</span></span>
               <span class="text-[0.72rem] text-muted">
-                Balance: {loadingBalances ? '\u2026' : formatRawTokenAmount(balance0, currency0Decimals)}
+                Balance: {loadingBalances ? '' : formatRawTokenAmount(balance0, currency0Decimals)}
               </span>
             </div>
             <input class={inputCls} type="text" bind:value={inputAmount0} on:input={onAmount0Input} placeholder="0.0" disabled={refAmount0 === 0n && refAmount1 > 0n} />
@@ -1350,7 +1397,7 @@
             <div class="flex items-center justify-between">
               <span class="font-bold text-text text-[0.9rem]">{currency1Symbol || 'Token1'} <span class="text-[0.72rem] text-muted font-normal">({currency1Decimals}d)</span></span>
               <span class="text-[0.72rem] text-muted">
-                Balance: {loadingBalances ? '\u2026' : formatRawTokenAmount(balance1, currency1Decimals)}
+                Balance: {loadingBalances ? '' : formatRawTokenAmount(balance1, currency1Decimals)}
               </span>
             </div>
             <input class={inputCls} type="text" bind:value={inputAmount1} on:input={onAmount1Input} placeholder="0.0" disabled={refAmount1 === 0n && refAmount0 > 0n} />
@@ -1547,7 +1594,7 @@
         <div class="flex gap-3">
           <button class={btnOutline} on:click={() => (wizardStep = 3)} disabled={deploying}>Back</button>
           <button class={btnPrimary} on:click={batchMode ? handleBatchDeploy : handleUnifiedDeploy} disabled={deploying || !$connected}>
-            {deploying ? 'Deploying\u2026' : batchMode ? 'Deploy Grid (Batched)' : 'Deploy Grid'}
+            {deploying ? 'Deploying' : batchMode ? 'Deploy Grid (Batched)' : 'Deploy Grid'}
           </button>
         </div>
       </section>
@@ -1561,7 +1608,7 @@
           <div class="space-y-4">
             <div>
               <button class={btnOutline} on:click={handleManualSetConfig} disabled={pendingSetConfig}>
-                {pendingSetConfig ? 'Sending\u2026' : 'Set Config Only'}
+                {pendingSetConfig ? 'Sending' : 'Set Config Only'}
               </button>
             </div>
 
@@ -1569,19 +1616,19 @@
               <div class="flex flex-col gap-2">
                 <span class={labelCls}>{tokenLabel(currency0Symbol, currency0)}</span>
                 <button class={btnOutline} on:click={() => handleApprovePermit2(currency0, true)} disabled={pendingPermit2_0 || !currency0 || isNativeCurrency(currency0)}>
-                  {pendingPermit2_0 ? 'Sending\u2026' : 'Approve for Permit2'}
+                  {pendingPermit2_0 ? 'Sending' : 'Approve for Permit2'}
                 </button>
                 <button class={btnOutline} on:click={() => handleGrantAllowance(currency0, true)} disabled={pendingAllow_0 || !currency0 || isNativeCurrency(currency0)}>
-                  {pendingAllow_0 ? 'Sending\u2026' : 'Grant Hook Allowance'}
+                  {pendingAllow_0 ? 'Sending' : 'Grant Hook Allowance'}
                 </button>
               </div>
               <div class="flex flex-col gap-2">
                 <span class={labelCls}>{tokenLabel(currency1Symbol, currency1)}</span>
                 <button class={btnOutline} on:click={() => handleApprovePermit2(currency1, false)} disabled={pendingPermit2_1 || !currency1 || isNativeCurrency(currency1)}>
-                  {pendingPermit2_1 ? 'Sending\u2026' : 'Approve for Permit2'}
+                  {pendingPermit2_1 ? 'Sending' : 'Approve for Permit2'}
                 </button>
                 <button class={btnOutline} on:click={() => handleGrantAllowance(currency1, false)} disabled={pendingAllow_1 || !currency1 || isNativeCurrency(currency1)}>
-                  {pendingAllow_1 ? 'Sending\u2026' : 'Grant Hook Allowance'}
+                  {pendingAllow_1 ? 'Sending' : 'Grant Hook Allowance'}
                 </button>
               </div>
             </div>
@@ -1623,7 +1670,7 @@
 
             <div>
               <button class={btnPrimary} on:click={handleManualDeploy} disabled={pendingManualDeploy || !deployLiquidity}>
-                {pendingManualDeploy ? 'Sending\u2026' : 'Deploy Grid Only'}
+                {pendingManualDeploy ? 'Sending' : 'Deploy Grid Only'}
               </button>
             </div>
           </div>

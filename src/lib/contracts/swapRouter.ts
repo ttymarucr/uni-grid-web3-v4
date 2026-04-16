@@ -112,7 +112,7 @@ export function estimateSwapOutput(
   const Q96 = 1n << 96n;
   // price = (sqrtPriceX96 / 2^96)^2 = sqrtPriceX96^2 / 2^192
   // token1/token0 price
-  const feeMultiplier = 10000n - BigInt(feeBps);
+  const feeMultiplier = 10000n - BigInt(Math.floor(feeBps));
   const amountAfterFee = (amountIn * feeMultiplier) / 10000n;
 
   if (zeroForOne) {
