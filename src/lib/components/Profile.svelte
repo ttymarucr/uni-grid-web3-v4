@@ -20,6 +20,7 @@
   import { getStoredPositions } from '$lib/contracts/customPositions';
   import {
     tokenLabel,
+    SLIPPAGE_OPTIONS,
   } from '$lib/contracts/gridUiShared';
   import { getTokenAmountsForOrders, formatTokenAmount, getAmountsForLiquidity, getSqrtPriceAtTick, formatRawTokenAmount, tickToPrice, formatSmallDecimal } from '$lib/contracts/tickMath';
   import { DIST_LABELS } from '$lib/contracts/strategyPresets';
@@ -147,6 +148,32 @@
   let cfgAutoRebalance = true;
   let cfgMaxSlippageDelta0 = '0';
   let cfgMaxSlippageDelta1 = '0';
+  let cfgRebalanceBpsCustom = false;
+  let customDelta0 = false;
+  let customDelta1 = false;
+
+  $: cfgRebalanceBpsSelectVal = cfgRebalanceBpsCustom ? 'custom' : cfgRebalanceBps.toString();
+  $: isCustomDelta0 = customDelta0 || !SLIPPAGE_OPTIONS.some(p => p.value === cfgMaxSlippageDelta0);
+  $: isCustomDelta1 = customDelta1 || !SLIPPAGE_OPTIONS.some(p => p.value === cfgMaxSlippageDelta1);
+  $: deltaSelectVal0 = isCustomDelta0 ? 'custom' : cfgMaxSlippageDelta0;
+  $: deltaSelectVal1 = isCustomDelta1 ? 'custom' : cfgMaxSlippageDelta1;
+
+  function onCfgRebalanceBpsChange(e: Event) {
+    const val = (e.target as HTMLSelectElement).value;
+    if (val === 'custom') { cfgRebalanceBpsCustom = true; }
+    else { cfgRebalanceBpsCustom = false; cfgRebalanceBps = Number(val); }
+  }
+
+  function onDeltaChange(e: Event, isT0: boolean) {
+    const val = (e.target as HTMLSelectElement).value;
+    if (val === 'custom') {
+      if (isT0) customDelta0 = true;
+      else customDelta1 = true;
+    } else {
+      if (isT0) { customDelta0 = false; cfgMaxSlippageDelta0 = val; }
+      else { customDelta1 = false; cfgMaxSlippageDelta1 = val; }
+    }
+  }
 
   // ── Grid spacing alignment helpers (must be multiples of pool tick spacing) ──
   $: spacingStep = Math.max(1, Number.isFinite(tickSpacing) ? tickSpacing : 1);
@@ -221,6 +248,9 @@
         cfgAutoRebalance = state.syncedConfig.cfgAutoRebalance;
         cfgMaxSlippageDelta0 = state.syncedConfig.cfgMaxSlippageDelta0;
         cfgMaxSlippageDelta1 = state.syncedConfig.cfgMaxSlippageDelta1;
+        cfgRebalanceBpsCustom = !SLIPPAGE_OPTIONS.some(p => Number(p.value) === cfgRebalanceBps);
+        customDelta0 = !SLIPPAGE_OPTIONS.some(p => p.value === cfgMaxSlippageDelta0);
+        customDelta1 = !SLIPPAGE_OPTIONS.some(p => p.value === cfgMaxSlippageDelta1);
       }
       return true;
     } catch (e: any) {
@@ -252,6 +282,9 @@
     cfgAutoRebalance = pos.gridConfig.autoRebalance;
     cfgMaxSlippageDelta0 = formatTokenAmount(pos.gridConfig.maxSlippageDelta0, currency0Decimals);
     cfgMaxSlippageDelta1 = formatTokenAmount(pos.gridConfig.maxSlippageDelta1, currency1Decimals);
+    cfgRebalanceBpsCustom = !SLIPPAGE_OPTIONS.some(p => Number(p.value) === cfgRebalanceBps);
+    customDelta0 = !SLIPPAGE_OPTIONS.some(p => p.value === cfgMaxSlippageDelta0);
+    customDelta1 = !SLIPPAGE_OPTIONS.some(p => p.value === cfgMaxSlippageDelta1);
     fetchPoolData();
     view = 'manage';
   }
@@ -890,7 +923,15 @@
           </label>
           <label class="flex flex-col gap-1">
             <span class={labelCls}>Rebalance Threshold ({(cfgRebalanceBps / 100).toFixed(2)}%)</span>
-            <input class={inputCls} type="number" bind:value={cfgRebalanceBps} min="0" />
+            <select class={inputCls} value={cfgRebalanceBpsSelectVal} on:change={onCfgRebalanceBpsChange}>
+              {#each SLIPPAGE_OPTIONS as opt}
+                <option value={opt.value}>{opt.label}</option>
+              {/each}
+              <option value="custom">Custom</option>
+            </select>
+            {#if cfgRebalanceBpsCustom}
+              <input class="{inputCls} mt-1" type="number" bind:value={cfgRebalanceBps} placeholder="BPS (e.g. 50 = 0.5%)" />
+            {/if}
           </label>
           <label class="flex flex-col gap-1">
             <span class={labelCls}>Distribution Type</span>
@@ -906,11 +947,27 @@
           </label>
           <label class="flex flex-col gap-1">
             <span class={labelCls}>Max Slippage {currency0Symbol || 'Token 0'}</span>
-            <input class={inputCls} type="text" bind:value={cfgMaxSlippageDelta0} placeholder="0 = no limit" />
+            <select class={inputCls} value={deltaSelectVal0} on:change={(e) => onDeltaChange(e, true)}>
+              {#each SLIPPAGE_OPTIONS as opt}
+                <option value={opt.value}>{opt.label}</option>
+              {/each}
+              <option value="custom">Custom</option>
+            </select>
+            {#if isCustomDelta0}
+              <input class="{inputCls} mt-1" type="text" bind:value={cfgMaxSlippageDelta0} placeholder="0 = no limit" />
+            {/if}
           </label>
           <label class="flex flex-col gap-1">
             <span class={labelCls}>Max Slippage {currency1Symbol || 'Token 1'}</span>
-            <input class={inputCls} type="text" bind:value={cfgMaxSlippageDelta1} placeholder="0 = no limit" />
+            <select class={inputCls} value={deltaSelectVal1} on:change={(e) => onDeltaChange(e, false)}>
+              {#each SLIPPAGE_OPTIONS as opt}
+                <option value={opt.value}>{opt.label}</option>
+              {/each}
+              <option value="custom">Custom</option>
+            </select>
+            {#if isCustomDelta1}
+              <input class="{inputCls} mt-1" type="text" bind:value={cfgMaxSlippageDelta1} placeholder="0 = no limit" />
+            {/if}
           </label>
         </div>
         <button class={btnPrimary} on:click={handleManualSetConfig} disabled={pendingSetConfig}>
