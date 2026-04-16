@@ -39,6 +39,7 @@
   import GridOrdersChart from './GridOrdersChart.svelte';
   import { RefreshCw, RotateCcw, X } from 'lucide-svelte';
   import TokenIcon from './TokenIcon.svelte';
+  import TokenPair from './TokenPair.svelte';
   import type { Address } from 'viem';
 
   // ── Style classes ──
@@ -598,8 +599,7 @@
           >
             <div class="flex justify-between items-center mb-3">
               <div class="flex items-center gap-1">
-              <TokenIcon symbol={pos.preset.currency0Symbol} size={20} />
-              <TokenIcon symbol={pos.preset.currency1Symbol} size={20} />
+              <TokenPair symbol0={pos.preset.currency0Symbol} symbol1={pos.preset.currency1Symbol} size={20} />
               <span class="font-extrabold text-text text-[1.05rem]">{pos.preset.label}</span>
               </div>
               {#if pos.totalAmount0 > 0n || pos.totalAmount1 > 0n}
@@ -665,8 +665,7 @@
         &larr; {deployedPositions.length > 0 ? 'Your Grids' : 'Change Pool'}
       </button>
       <h2 class="text-[1.3rem] font-extrabold inline-flex items-center gap-1.5">
-        <TokenIcon symbol={currency0Symbol} size={22} />
-        <TokenIcon symbol={currency1Symbol} size={22} />
+        <TokenPair symbol0={currency0Symbol} symbol1={currency1Symbol} size={22} />
         {tokenLabel(currency0Symbol, currency0)} / {tokenLabel(currency1Symbol, currency1)}
       </h2>
     </div>

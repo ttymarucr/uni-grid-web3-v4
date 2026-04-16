@@ -4,6 +4,7 @@
   import type { Plugin } from 'chart.js';
   import { tickToPrice, getAmountsForLiquidity, getSqrtPriceAtTick, formatTokenAmount, formatSmallDecimal } from '$lib/contracts/tickMath';
   import TokenIcon from './TokenIcon.svelte';
+  import TokenPair from './TokenPair.svelte';
 
   Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
 
@@ -272,8 +273,7 @@
 <div class="w-full">
   <div class="flex items-center justify-between mb-2">
     <p class="text-[0.72rem] font-bold text-muted uppercase tracking-wider inline-flex items-center gap-1">
-      <TokenIcon symbol={token0Symbol} size={16} />
-      <TokenIcon symbol={token1Symbol} size={16} />
+      <TokenPair symbol0={token0Symbol} symbol1={token1Symbol} size={16} />
       Grid Orders — Price Ranges
     </p>
     {#if token0Symbol && token1Symbol}

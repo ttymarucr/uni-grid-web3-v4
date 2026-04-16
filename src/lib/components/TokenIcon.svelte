@@ -11,18 +11,21 @@
   export { className as class };
 
   $: iconId = getTokenIconId(symbol);
-  $: monogram = getMonogram(symbol);
+  $: monogram = getMonogram(symbol, 2);
+  $: monogramTitle = getMonogram(symbol, 4);
 </script>
 
 {#if iconId}
-  <span class="inline-flex items-center justify-center shrink-0 {className}" style="width:{size}px;height:{size}px" aria-label="{symbol} icon">
+  <span class="inline-flex items-center justify-center shrink-0 {className}" 
+    style="width:{size}px;height:{size}px" aria-label="{symbol} icon" title="{symbol}">
     <Icon icon={iconId} width={size} height={size} />
   </span>
 {:else}
   <span
-    class="inline-flex items-center justify-center shrink-0 rounded-full bg-surface-strong text-muted font-bold select-none {className}"
+    class="inline-flex items-center justify-center shrink-0 rounded-full border border-line bg-surface-strong text-muted font-bold select-none {className}"
     style="width:{size}px;height:{size}px;font-size:{Math.round(size * 0.45)}px;line-height:1"
     aria-label="{symbol} icon"
+    title="{monogramTitle}"
   >
     {monogram}
   </span>

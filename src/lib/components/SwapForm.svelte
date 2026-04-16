@@ -17,6 +17,7 @@
   import { SLIPPAGE_OPTIONS } from '$lib/contracts/gridUiShared';
   import { executeSwap, estimateSwapOutput, poolFeeToBps } from '$lib/contracts/swapRouter';
   import TokenIcon from './TokenIcon.svelte';
+  import TokenPair from './TokenPair.svelte';
   import type { Address } from 'viem';
 
   const inputCls = 'w-full py-3 px-4 border border-line rounded-[10px] bg-surface-strong text-text text-lg focus:outline-2 focus:outline-accent focus:-outline-offset-1';
@@ -299,8 +300,7 @@
           on:click={() => selectPreset(i)}
         >
           <span class="inline-flex items-center gap-1">
-            <TokenIcon symbol={preset.currency0Symbol} size={14} />
-            <TokenIcon symbol={preset.currency1Symbol} size={14} />
+            <TokenPair symbol0={preset.currency0Symbol} symbol1={preset.currency1Symbol} size={14} />
             {preset.label}
             <span class="text-[0.65rem] text-muted">({(preset.fee / 10000).toFixed(4)}%)</span>
           </span>

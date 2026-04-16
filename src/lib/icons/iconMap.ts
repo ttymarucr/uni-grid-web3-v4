@@ -63,8 +63,8 @@ export function getStrategyIconId(label: string): string | null {
  * Generate a short monogram string (1–4 chars) for use as a text-based
  * fallback when no icon is available.
  */
-export function getMonogram(symbol: string): string {
+export function getMonogram(symbol: string, length: number = 4): string {
   const s = symbol.trim();
-  if (s.length <= 4) return s.toUpperCase();
-  return s.slice(0, 4).toUpperCase();
+  if (s.length <= length) return s.toUpperCase();
+  return s.slice(0, length).toUpperCase();
 }

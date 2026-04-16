@@ -61,6 +61,7 @@
   import WeightChart from './WeightChart.svelte';
   import GridOrdersChart from './GridOrdersChart.svelte';
   import TokenIcon from './TokenIcon.svelte';
+  import TokenPair from './TokenPair.svelte';
   import type { Address } from 'viem';
 
   // ── Style classes ──
@@ -1105,8 +1106,7 @@
                 on:click={() => selectPreset(i)}
               >
                 <span class="flex items-center gap-1 font-bold text-text">
-                  <TokenIcon symbol={preset.currency0Symbol} size={18} />
-                  <TokenIcon symbol={preset.currency1Symbol} size={18} />
+                  <TokenPair symbol0={preset.currency0Symbol} symbol1={preset.currency1Symbol} size={18} />
                   {preset.label}
                 </span>
                 <span class="block text-[0.72rem] text-muted mt-0.5">Fee: {(preset.fee / 10000).toFixed(2)}% &middot; Tick Spacing: {preset.tickSpacing}</span>
