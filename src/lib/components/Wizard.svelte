@@ -253,6 +253,7 @@
     referenceTick = reset.referenceTick;
     view = 'wizard';
     wizardStep = reset.wizardStep;
+    cfgRebalanceBpsCustom = false;
     }
   }
 
@@ -260,11 +261,18 @@
   let selectedStrategyIdx = -1;
   let cfgGridSpacing = 60;
   let cfgMaxOrders = 10;
-  let cfgRebalanceBps = 200;
+  let cfgRebalanceBps = 50;
   let cfgDistType = 0;
   let cfgAutoRebalance = true;
+  let cfgRebalanceBpsCustom = false;
   let cfgMaxSlippageDelta0 = '0';
   let cfgMaxSlippageDelta1 = '0';
+
+  function onCfgRebalanceBpsChange(e: Event) {
+    const val = (e.target as HTMLSelectElement).value;
+    if (val === 'custom') { cfgRebalanceBpsCustom = true; }
+    else { cfgRebalanceBpsCustom = false; cfgRebalanceBps = Number(val); }
+  }
 
   function selectStrategy(idx: number) {
     selectedStrategyIdx = idx;
@@ -276,6 +284,8 @@
       cfgDistType = s.distributionType;
       cfgAutoRebalance = s.autoRebalance;
     }
+    cfgRebalanceBps = 50;
+    cfgRebalanceBpsCustom = false;
   }
 
   // ── Grid spacing alignment helpers (must be multiples of pool tick spacing) ──
@@ -294,6 +304,7 @@
 
   // Keep spacing valid if strategy/pool changes make it misaligned.
   $: {
+    const step = spacingStep; // explicit dep so Svelte re-runs when tickSpacing changes
     const normalized = normalizeGridSpacing(cfgGridSpacing);
     if (normalized !== cfgGridSpacing) cfgGridSpacing = normalized;
   }
@@ -512,8 +523,8 @@
         cfgRebalanceBps = state.syncedConfig.cfgRebalanceBps;
         cfgDistType = state.syncedConfig.cfgDistType;
         cfgAutoRebalance = state.syncedConfig.cfgAutoRebalance;
-        cfgMaxSlippageDelta0 = state.syncedConfig.cfgMaxSlippageDelta0;
-        cfgMaxSlippageDelta1 = state.syncedConfig.cfgMaxSlippageDelta1;
+        cfgRebalanceBps = 50;
+        cfgRebalanceBpsCustom = false;
       }
       return true;
     } catch (e: any) {
@@ -535,8 +546,8 @@
     cfgRebalanceBps = gridConfig.rebalanceThresholdBps;
     cfgDistType = gridConfig.distributionType;
     cfgAutoRebalance = gridConfig.autoRebalance;
-    cfgMaxSlippageDelta0 = formatTokenAmount(gridConfig.maxSlippageDelta0, currency0Decimals);
-    cfgMaxSlippageDelta1 = formatTokenAmount(gridConfig.maxSlippageDelta1, currency1Decimals);
+    cfgRebalanceBps = gridConfig.rebalanceThresholdBps;
+    cfgRebalanceBpsCustom = false;
     selectedStrategyIdx = -1;
     previewedOrders = [];
     inputAmount0 = '';
@@ -660,6 +671,8 @@
   $: mismatch0Bps = mismatchBps(enteredAmount0Raw, estimatedAmounts.totalAmount0);
   $: mismatch1Bps = mismatchBps(enteredAmount1Raw, estimatedAmounts.totalAmount1);
   $: hasAmountMismatchWarning = mismatch0Bps > AMOUNT_MISMATCH_WARN_BPS || mismatch1Bps > AMOUNT_MISMATCH_WARN_BPS;
+
+  $: cfgRebalanceBpsSelectVal = cfgRebalanceBpsCustom ? 'custom' : cfgRebalanceBps.toString();
 
   // ── Insufficient balance warnings (Step 3) — validated against estimated on-chain amounts ──
   $: insufficientBalance0 = estimatedAmounts.totalAmount0 > 0n && estimatedAmounts.totalAmount0 > balance0 && !(refAmount0 === 0n && refAmount1 > 0n);
@@ -1201,14 +1214,18 @@
               <input class="w-[1.1rem] h-[1.1rem] accent-[var(--color-accent)]" type="checkbox" bind:checked={cfgAutoRebalance} />
               <span class={labelCls}>Auto Rebalance</span>
             </label>
-            {#if advancedMode}
+            {#if advancedMode && cfgAutoRebalance}
               <label class="flex flex-col gap-1">
-                <span class={labelCls}>Max Slippage {currency0Symbol || 'Token 0'}</span>
-                <input class={inputCls} type="text" bind:value={cfgMaxSlippageDelta0} placeholder="0 = no limit" />
-              </label>
-              <label class="flex flex-col gap-1">
-                <span class={labelCls}>Max Slippage {currency1Symbol || 'Token 1'}</span>
-                <input class={inputCls} type="text" bind:value={cfgMaxSlippageDelta1} placeholder="0 = no limit" />
+                <span class={labelCls}>Max Rebalance Slippage</span>
+                <select class={inputCls} value={cfgRebalanceBpsSelectVal} on:change={onCfgRebalanceBpsChange}>
+                  {#each SLIPPAGE_OPTIONS as opt}
+                    <option value={opt.value}>{opt.label}</option>
+                  {/each}
+                  <option value="custom">Custom</option>
+                </select>
+                {#if cfgRebalanceBpsCustom}
+                  <input class="{inputCls} mt-1" type="number" bind:value={cfgRebalanceBps} placeholder="BPS (e.g. 50 = 0.5%)" />
+                {/if}
               </label>
             {/if}
           </div>
