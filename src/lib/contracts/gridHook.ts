@@ -1,4 +1,4 @@
-import { readContract, writeContract, waitForTransactionReceipt } from '@wagmi/core';
+import { readContract, writeContract, simulateContract, waitForTransactionReceipt } from '@wagmi/core';
 import { config } from '$lib/wagmi/client';
 import gridHookAbi_ from './abi/GridHook.json';
 export const gridHookAbi = gridHookAbi_;
@@ -42,6 +42,9 @@ export interface PoolState {
   initialized: boolean;
   currentTick: number;
   swapCount: number;
+  lastSwapBlock: bigint;
+  blockStartTick: number;
+  swapsThisBlock: number;
 }
 
 export interface UserGridState {
@@ -115,6 +118,9 @@ export async function getPoolState(hookAddress: Address, key: PoolKey): Promise<
     initialized: Boolean(r.initialized),
     currentTick: Number(r.currentTick),
     swapCount: Number(r.swapCount),
+    lastSwapBlock: BigInt(r.lastSwapBlock ?? 0),
+    blockStartTick: Number(r.blockStartTick ?? 0),
+    swapsThisBlock: Number(r.swapsThisBlock ?? 0),
   };
 }
 
@@ -435,6 +441,30 @@ export async function deployGrid(
     value,
   });
   return { hash, wait: () => waitForTransactionReceipt(cfg(), { hash }) };
+}
+
+/**
+ * Simulate a deployGrid call via eth_call without submitting a transaction.
+ * Throws if the deploy would revert (e.g. insufficient balance, slippage, deadline expired).
+ */
+export async function simulateDeployGrid(
+  hookAddress: Address,
+  key: PoolKey,
+  totalLiquidity: bigint,
+  maxDelta0: bigint,
+  maxDelta1: bigint,
+  deadline: bigint,
+  value: bigint = 0n,
+  account?: Address,
+) {
+  await simulateContract(cfg(), {
+    address: hookAddress,
+    abi,
+    functionName: 'deployGrid',
+    args: [key, totalLiquidity, maxDelta0, maxDelta1, deadline],
+    value,
+    ...(account ? { account } : {}),
+  });
 }
 
 export async function rebalance(hookAddress: Address, key: PoolKey, user: Address, deadline: bigint, value: bigint = 0n) {

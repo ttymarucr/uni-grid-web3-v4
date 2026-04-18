@@ -1,13 +1,14 @@
 <script lang="ts">
   import { connected, signerAddress, chainId as chainIdStore } from '$lib/stores/wallet';
   import { getGridHookAddress, PERMIT2_ADDRESS } from '$lib/contracts/config';
-  import { executeTransaction, ensureChain, executeBatchTransaction, walletSupportsBatching, type BatchCall } from '$lib/contracts/txWrapper';
+  import { executeTransaction, ensureChain, executeBatchTransaction, walletSupportsBatching, parseError, type BatchCall } from '$lib/contracts/txWrapper';
   import { addToast } from '$lib/stores/toasts';
   import {
     getGridConfig,
     getPoolState,
     setGridConfig as writeSetGridConfig,
     deployGrid as writeDeployGrid,
+    simulateDeployGrid,
     getDeadline,
     isGridConfigEqual,
     getPoolManagerAddress,
@@ -818,13 +819,26 @@
         }
       }
 
-      // 3. Deploy grid
-      deployStepLabel = 'Deploying grid';
+      // 3. Simulate deploy (catches reverts before wallet popup)
+      deployStepLabel = 'Simulating deploy';
       const bps0 = BigInt(deployMaxDelta0 || '0');
       const bps1 = BigInt(deployMaxDelta1 || '0');
       const maxD0 = bps0 === 0n ? 0n : estimatedAmounts.totalAmount0 * bps0 / 10000n;
       const maxD1 = bps1 === 0n ? 0n : estimatedAmounts.totalAmount1 * bps1 / 10000n;
       const nativeValue = getNativeDeployValue(maxD0, maxD1);
+
+      try {
+        await simulateDeployGrid(
+          hookAddress, buildPoolKey(), BigInt(deployLiquidity),
+          maxD0, maxD1, getDeadline(deadlineMinutes), nativeValue, user,
+        );
+      } catch (simErr: any) {
+        addToast('error', `Deploy would fail: ${parseError(simErr)}`);
+        return;
+      }
+
+      // 4. Deploy grid
+      deployStepLabel = 'Deploying grid';
       await executeTransaction('Deploy Grid', () =>
         writeDeployGrid(
           hookAddress,
@@ -905,6 +919,7 @@
       }
 
       // 2. Token approvals (skip native)
+      let approvalsAlreadySufficient = true;
       const tokens = [
         { addr: currency0, label: tokenLabel(currency0Symbol, currency0) },
         { addr: currency1, label: tokenLabel(currency1Symbol, currency1) },
@@ -914,6 +929,7 @@
 
         const erc20 = await getTokenAllowanceForPermit2(tok.addr as Address, user);
         if (erc20 < MAX_UINT160 / 2n) {
+          approvalsAlreadySufficient = false;
           calls.push({
             to: tok.addr as Address,
             abi: erc20ApproveAbi,
@@ -924,6 +940,7 @@
 
         const p2 = await getPermit2Allowance(user, tok.addr as Address, hookAddress);
         if (p2.amount < MAX_UINT160 / 2n) {
+          approvalsAlreadySufficient = false;
           calls.push({
             to: PERMIT2_ADDRESS,
             abi: permit2ApproveAbi,
@@ -933,7 +950,27 @@
         }
       }
 
-      // 3. Deploy grid
+      // 3. Simulate deploy (only when all prereqs are already on-chain)
+      const configAlreadySet = isGridConfigEqual(desiredConfig, onChainConfig);
+      const allPrereqsOnChain = !needsPoolInit && configAlreadySet && approvalsAlreadySufficient;
+      if (allPrereqsOnChain) {
+        const bps0Sim = BigInt(deployMaxDelta0 || '0');
+        const bps1Sim = BigInt(deployMaxDelta1 || '0');
+        const maxD0Sim = bps0Sim === 0n ? 0n : estimatedAmounts.totalAmount0 * bps0Sim / 10000n;
+        const maxD1Sim = bps1Sim === 0n ? 0n : estimatedAmounts.totalAmount1 * bps1Sim / 10000n;
+        const nativeValueSim = getNativeDeployValue(maxD0Sim, maxD1Sim);
+        try {
+          await simulateDeployGrid(
+            hookAddress, buildPoolKey(), BigInt(deployLiquidity),
+            maxD0Sim, maxD1Sim, getDeadline(deadlineMinutes), nativeValueSim, user,
+          );
+        } catch (simErr: any) {
+          addToast('error', `Deploy would fail: ${parseError(simErr)}`);
+          return;
+        }
+      }
+
+      // 4. Deploy grid
       const bps0 = BigInt(deployMaxDelta0 || '0');
       const bps1 = BigInt(deployMaxDelta1 || '0');
       const maxD0 = bps0 === 0n ? 0n : estimatedAmounts.totalAmount0 * bps0 / 10000n;
@@ -1022,6 +1059,16 @@
     const maxD0 = bps0 === 0n ? 0n : estimatedAmounts.totalAmount0 * bps0 / 10000n;
     const maxD1 = bps1 === 0n ? 0n : estimatedAmounts.totalAmount1 * bps1 / 10000n;
     const nativeValue = getNativeDeployValue(maxD0, maxD1);
+    try {
+      await simulateDeployGrid(
+        hookAddress, buildPoolKey(), BigInt(deployLiquidity),
+        maxD0, maxD1, getDeadline(deadlineMinutes), nativeValue, user,
+      );
+    } catch (simErr: any) {
+      addToast('error', `Deploy would fail: ${parseError(simErr)}`);
+      pendingManualDeploy = false;
+      return;
+    }
     await executeTransaction('Deploy Grid', () =>
       writeDeployGrid(hookAddress, buildPoolKey(), BigInt(deployLiquidity), maxD0, maxD1, getDeadline(deadlineMinutes), nativeValue),
     );

@@ -78,7 +78,7 @@ export async function executeTransaction(
   }
 }
 
-function parseError(err: any): string {
+export function parseError(err: any): string {
   if (err?.name === 'UserRejectedRequestError' || err?.code === 4001) {
     return 'transaction rejected by user';
   }
@@ -88,7 +88,20 @@ function parseError(err: any): string {
   if (err?.message?.includes('chain mismatch') || err?.message?.includes('chainId')) {
     return 'wrong network — please switch to a supported chain';
   }
-  return err?.shortMessage || err?.message || 'unknown error';
+  const msg = err?.shortMessage || err?.message || '';
+  if (msg.includes('ExcessivePriceImpact')) {
+    return 'swap blocked: price moved too far in this block (anti-sandwich protection)';
+  }
+  if (msg.includes('RebalanceInSameBlockAsSwap')) {
+    return 'rebalance blocked: a swap occurred in this block — try again next block';
+  }
+  if (msg.includes('RebalanceCooldownNotMet')) {
+    return 'rebalance cooldown: wait 60 seconds between rebalances';
+  }
+  if (msg.includes('KeeperRebalanceBlockedDuringVolatility')) {
+    return 'keeper rebalance blocked during high volatility';
+  }
+  return msg || 'unknown error';
 }
 
 // ── EIP-5792 batched calls (AA wallets) ──

@@ -1,4 +1,4 @@
-import { readContract, writeContract, waitForTransactionReceipt } from '@wagmi/core';
+import { readContract, writeContract, simulateContract, waitForTransactionReceipt } from '@wagmi/core';
 import { config } from '$lib/wagmi/client';
 import type { Address } from 'viem';
 import type { PoolKey } from './gridHook';
@@ -9,7 +9,7 @@ function cfg() {
 
 // ── ABI fragments ──
 
-const SWAP_ROUTER_ABI = [
+export const SWAP_ROUTER_ABI = [
   {
     type: 'function',
     name: 'swap',
@@ -93,6 +93,38 @@ export async function executeSwap(
     value,
   });
   return { hash, wait: () => waitForTransactionReceipt(cfg(), { hash }) };
+}
+
+/**
+ * Simulate a swap via eth_call without submitting a transaction.
+ * Throws if the swap would revert (e.g. ExcessivePriceImpact, insufficient liquidity).
+ */
+export async function simulateSwap(
+  routerAddress: Address,
+  key: PoolKey,
+  params: SwapParams,
+  value: bigint = 0n,
+  account?: Address,
+) {
+  const sqrtPriceLimitX96 =
+    params.sqrtPriceLimitX96 ?? (params.zeroForOne ? MIN_SQRT_PRICE_LIMIT : MAX_SQRT_PRICE_LIMIT);
+
+  await simulateContract(cfg(), {
+    address: routerAddress,
+    abi: SWAP_ROUTER_ABI,
+    functionName: 'swap',
+    args: [
+      key,
+      {
+        zeroForOne: params.zeroForOne,
+        amountSpecified: params.amountSpecified,
+        sqrtPriceLimitX96,
+      },
+      '0x',
+    ],
+    value,
+    ...(account ? { account } : {}),
+  });
 }
 
 /**

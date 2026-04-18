@@ -582,6 +582,17 @@
         <button class={btnPrimary} on:click={startNewGrid}>
           <span class="inline-flex items-center gap-1.5">&#x1FA84; Deploy a new Grid</span>
         </button>
+        <button
+          class={actionBtnNeutral}
+          on:click={scanDeployedPositions}
+          disabled={scanningPositions}
+          aria-label={scanningPositions ? 'Refreshing' : 'Refresh positions'}
+          title={scanningPositions ? 'Refreshing' : 'Refresh positions'}
+        >
+          <span class:animate-spin={scanningPositions}>
+            <RotateCcw size={15} />
+          </span>
+        </button>
       </div>
     </div>
 
@@ -635,6 +646,10 @@
                 <span class={statLabel}>Swaps</span>
                 <span class="text-sm font-semibold font-mono">{pos.poolState.swapCount}</span>
               </div>
+              <div class="flex flex-col gap-0.5">
+                <span class={statLabel}>Block Swaps</span>
+                <span class="text-sm font-semibold font-mono">{pos.poolState.swapsThisBlock}</span>
+              </div>
               {#if pos.apr != null}
                 <div class="flex flex-col gap-0.5" title="APR = (fees ÷ capital) × (365d ÷ elapsed) × 100&#10;Both fees and capital are converted to token1 using the current tick price.">
                   <span class={statLabel}>APR</span>
@@ -685,9 +700,9 @@
           <button
             class={actionBtnPrimary}
             on:click={handleRebalance}
-            disabled={pendingRebalance || (rebalanceEstimate != null && !rebalanceEstimate.thresholdMet)}
-            aria-label={pendingRebalance ? 'Rebalancing' : rebalanceEstimate && !rebalanceEstimate.thresholdMet ? 'Threshold not met' : 'Rebalance grid'}
-            title={pendingRebalance ? 'Rebalancing' : rebalanceEstimate && !rebalanceEstimate.thresholdMet ? 'Price hasn\u2019t moved enough to rebalance' : 'Rebalance grid'}
+            disabled={pendingRebalance || (rebalanceEstimate != null && !rebalanceEstimate.thresholdMet) || (userState != null && userState.lastActionTimestamp > 0 && Math.floor(Date.now() / 1000) < userState.lastActionTimestamp + 60)}
+            aria-label={pendingRebalance ? 'Rebalancing' : (userState != null && userState.lastActionTimestamp > 0 && Math.floor(Date.now() / 1000) < userState.lastActionTimestamp + 60) ? 'Cooldown active' : rebalanceEstimate && !rebalanceEstimate.thresholdMet ? 'Threshold not met' : 'Rebalance grid'}
+            title={pendingRebalance ? 'Rebalancing' : (userState != null && userState.lastActionTimestamp > 0 && Math.floor(Date.now() / 1000) < userState.lastActionTimestamp + 60) ? `Cooldown: ${userState.lastActionTimestamp + 60 - Math.floor(Date.now() / 1000)}s remaining` : rebalanceEstimate && !rebalanceEstimate.thresholdMet ? 'Price hasn\u2019t moved enough to rebalance' : 'Rebalance grid'}
           >
             <span class:animate-spin={pendingRebalance}>
               <RefreshCw size={15} />
@@ -731,6 +746,18 @@
           <div class="flex flex-col gap-0.5">
             <span class={statLabel}>Swap Count</span>
             <span class="text-base font-semibold">{poolState.swapCount}</span>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <span class={statLabel}>Swaps This Block</span>
+            <span class="text-base font-semibold font-mono">{poolState.swapsThisBlock}</span>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <span class={statLabel}>Block Start Tick</span>
+            <span class="text-base font-semibold font-mono">{poolState.blockStartTick}</span>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <span class={statLabel}>Last Swap Block</span>
+            <span class="text-base font-semibold font-mono">{poolState.lastSwapBlock}</span>
           </div>
         {/if}
         {#if userState}
