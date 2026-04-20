@@ -411,8 +411,8 @@
   let deploying = false;
   let deployStepLabel = '';
   let deadlineMinutes = 5;
-  let batchMode = false;
   let walletCanBatch = false;
+  let showDeployDropdown = false;
   const AMOUNT_MISMATCH_WARN_BPS = 100n; // 1%
 
   // Detect AA batching support when wallet connects
@@ -1625,24 +1625,44 @@
           </div>
         {/if}
 
-        {#if walletCanBatch}
-          <label class="flex items-center gap-2 mb-4 cursor-pointer select-none">
-            <input
-              class="w-[1.1rem] h-[1.1rem] accent-[var(--color-accent)]"
-              type="checkbox"
-              bind:checked={batchMode}
-              disabled={deploying}
-            />
-            <span class="text-sm font-semibold text-text">Batch all transactions in a single call</span>
-            <span class="text-[0.72rem] text-muted">(AA wallet detected)</span>
-          </label>
-        {/if}
-
         <div class="flex gap-3">
           <button class={btnOutline} on:click={() => (wizardStep = 3)} disabled={deploying}>Back</button>
-          <button class={btnPrimary} on:click={batchMode ? handleBatchDeploy : handleUnifiedDeploy} disabled={deploying || !$connected}>
-            {deploying ? 'Deploying' : batchMode ? 'Deploy Grid (Batched)' : 'Deploy Grid'}
-          </button>
+          {#if walletCanBatch}
+            <div class="relative flex-1 flex">
+              <button
+                class="flex-1 cursor-pointer border-none rounded-l-xl rounded-r-none py-2.5 px-5 font-bold text-sm bg-accent text-on-accent hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150"
+                disabled={deploying || !$connected}
+                on:click={handleUnifiedDeploy}
+              >
+                {deploying ? 'Deploying…' : 'Deploy Grid'}
+              </button>
+              <button
+                class="cursor-pointer border-none rounded-r-xl rounded-l-none py-2.5 px-2.5 font-bold text-sm bg-accent text-on-accent hover:bg-accent-strong disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-150 border-l border-l-on-accent/20"
+                disabled={deploying || !$connected}
+                on:click|stopPropagation={() => showDeployDropdown = !showDeployDropdown}
+              >
+                <span class="text-xs">▾</span>
+              </button>
+              {#if showDeployDropdown}
+                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                <div class="fixed inset-0 z-40" on:click={() => showDeployDropdown = false}></div>
+                <div class="absolute right-0 mt-11 z-50 bg-surface border border-line rounded-xl shadow-card py-1 min-w-[220px]">
+                  <button
+                    class="w-full text-left cursor-pointer bg-transparent border-none px-4 py-2.5 text-sm font-semibold text-text hover:bg-surface-strong transition-colors duration-150"
+                    on:click={() => { showDeployDropdown = false; handleBatchDeploy(); }}
+                  >
+                    Deploy Grid (Batched)
+                    <span class="block text-[0.68rem] text-muted font-normal mt-0.5">All steps in a single call</span>
+                  </button>
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <button class="{btnPrimary} flex-1" on:click={handleUnifiedDeploy} disabled={deploying || !$connected}>
+              {deploying ? 'Deploying…' : 'Deploy Grid'}
+            </button>
+          {/if}
         </div>
       </section>
 

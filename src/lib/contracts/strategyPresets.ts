@@ -57,7 +57,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   },
 ];
 
-export const DIST_LABELS = ['Flat', 'Linear', 'Reverse Linear', 'Fibonacci', 'Sigmoid', 'Logarithmic'];
+export const DIST_LABELS = ['Flat', 'Linear', 'Reverse Linear', 'Fibonacci', 'Sigmoid', 'Logarithmic', 'Reverse Fibonacci', 'Bell', 'U-Shape'];
 
 export const DIST_DESCRIPTIONS: Record<number, string> = {
   0: 'Equal liquidity across all positions',
@@ -66,4 +66,7 @@ export const DIST_DESCRIPTIONS: Record<number, string> = {
   3: 'Fibonacci-weighted concentration',
   4: 'S-curve distribution — smooth center focus',
   5: 'Logarithmic — gentle concentration',
+  6: 'Fibonacci-weighted, heaviest at lower ticks',
+  7: 'Concentrated at center — for range-bound markets',
+  8: 'Concentrated at edges — for high-volatility swings',
 };

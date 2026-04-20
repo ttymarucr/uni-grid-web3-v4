@@ -646,10 +646,6 @@
                 <span class={statLabel}>Swaps</span>
                 <span class="text-sm font-semibold font-mono">{pos.poolState.swapCount}</span>
               </div>
-              <div class="flex flex-col gap-0.5">
-                <span class={statLabel}>Block Swaps</span>
-                <span class="text-sm font-semibold font-mono">{pos.poolState.swapsThisBlock}</span>
-              </div>
               {#if pos.apr != null}
                 <div class="flex flex-col gap-0.5" title="APR = (fees ÷ capital) × (365d ÷ elapsed) × 100&#10;Both fees and capital are converted to token1 using the current tick price.">
                   <span class={statLabel}>APR</span>

@@ -193,6 +193,9 @@ export enum DistributionType {
   FIBONACCI = 3,
   SIGMOID = 4,
   LOGARITHMIC = 5,
+  REVERSE_FIBONACCI = 6,
+  BELL = 7,
+  U_SHAPE = 8,
 }
 
 function lnScaled(x: bigint): bigint {
@@ -273,6 +276,40 @@ export function previewWeights(gridLength: number, distributionType: number): bi
       const value = lnScaled(BigInt(i) + 2n);
       weights[i] = value;
       total += value;
+    }
+    for (let i = 0; i < gridLength; i++) weights[i] = (weights[i] * TOTAL_BPS) / total;
+    return weights;
+  }
+
+  if (distributionType === DistributionType.REVERSE_FIBONACCI) {
+    if (gridLength === 1) { weights[0] = TOTAL_BPS; return weights; }
+    const fwd = new Array<bigint>(gridLength);
+    fwd[0] = 1n; fwd[1] = 1n;
+    let total = 2n; let prev = 1n; let curr = 1n;
+    for (let i = 2; i < gridLength; i++) {
+      const next = prev + curr; fwd[i] = next; total += next; prev = curr; curr = next;
+    }
+    for (let i = 0; i < gridLength; i++) weights[i] = (fwd[gridLength - 1 - i] * TOTAL_BPS) / total;
+    return weights;
+  }
+
+  if (distributionType === DistributionType.BELL) {
+    let total = 0n;
+    for (let i = 0; i < gridLength; i++) {
+      const distFromEdge = BigInt(i) < n - 1n - BigInt(i) ? BigInt(i) : n - 1n - BigInt(i);
+      const value = distFromEdge + 1n;
+      weights[i] = value; total += value;
+    }
+    for (let i = 0; i < gridLength; i++) weights[i] = (weights[i] * TOTAL_BPS) / total;
+    return weights;
+  }
+
+  if (distributionType === DistributionType.U_SHAPE) {
+    let total = 0n;
+    for (let i = 0; i < gridLength; i++) {
+      const distFromCenter = BigInt(i) > n - 1n - BigInt(i) ? BigInt(i) : n - 1n - BigInt(i);
+      const value = distFromCenter + 1n;
+      weights[i] = value; total += value;
     }
     for (let i = 0; i < gridLength; i++) weights[i] = (weights[i] * TOTAL_BPS) / total;
     return weights;
